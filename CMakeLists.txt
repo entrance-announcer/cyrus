@@ -39,9 +39,20 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT
 endif ()
 
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_BINARY_DIR}")
+set(CYRUS_DEFAULT_COMPILE_OPTIONS
+        $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+        -Wsign-conversion
+        -Weffc++>
+        $<$<CXX_COMPILER_ID:MSVC>:
+        /W4
+        /WX>)
 
 find_package(audiofile REQUIRED CONFIG)
+find_package(fmt REQUIRED CONFIG)
 
 enable_testing()
-add_subdirectory(libcyrus)
 add_subdirectory(cyrus)

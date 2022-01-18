@@ -6,10 +6,9 @@
 #include <unistd.h>         // close
 
 #include <cerrno>
+#include <cyrus/device_probing.hpp>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <libcyrus/device_probing.hpp>
 #include <optional>
 #include <system_error>
 #include <utility>

@@ -1,5 +1,6 @@
 [requires]
 audiofile/1.0.9
+fmt/8.1.1
 
 [generators]
 CMakeDeps
