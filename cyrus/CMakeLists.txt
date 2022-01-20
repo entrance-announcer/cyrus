@@ -4,7 +4,6 @@ add_library(cyrus_cyruslib STATIC
         device_probing.hpp device_probing.cpp
         sample_conversions.hpp
         write_audio.hpp write_audio.cpp
-        user_message_exception.hpp user_message_exception.cpp
         cyrus_main.hpp cyrus_main.cpp
         audio_signal.hpp)
 target_include_directories(cyrus_cyruslib PUBLIC "${PROJECT_SOURCE_DIR}")

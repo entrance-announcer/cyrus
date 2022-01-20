@@ -5,8 +5,8 @@
 #include <cerrno>
 #include <cstring>  // strerror, std::size_t
 #include <cyrus/audio_signal.hpp>
+#include <cyrus/cli.hpp>
 #include <cyrus/device_probing.hpp>
-#include <cyrus/user_message_exception.hpp>
 #include <cyrus/write_audio.hpp>
 #include <filesystem>
 #include <type_traits>

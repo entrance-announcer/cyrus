@@ -54,7 +54,7 @@ int next_arg_to_int(const int argc, const char* const argv[],
   // read next argument (that following the flag); where the value should be
   const int val_arg_idx = flag_arg_idx + 1;
   if (val_arg_idx >= argc) {
-    throw Argument_parse_error(
+    throw Argument_parse_exception(
         fmt::format("Expected an integer value following the provided {} flag, "
                     "{}.",
                     option_name, argv[flag_arg_idx]));
@@ -66,7 +66,7 @@ int next_arg_to_int(const int argc, const char* const argv[],
   if (const auto result =
           std::from_chars(val_arg, val_arg + std::strlen(val_arg), val);
       result.ec != std::errc{}) {
-    throw Argument_parse_error(fmt::format(
+    throw Argument_parse_exception(fmt::format(
         "Failed parsing argument {} to an integer for option {}: {}\n",
         result.ptr, option_name, std::strerror(static_cast<int>(result.ec))));
   }
@@ -79,8 +79,14 @@ std::string help_message() {
   return fmt::format(help_message_fmt, default_bit_depth, default_word_size);
 }
 
-Argument_parse_error::Argument_parse_error(const std::string& msg)
+Argument_parse_exception::Argument_parse_exception(const std::string& msg)
     : std::runtime_error(msg) {}
+
+User_message_exception::User_message_exception(const std::string& msg)
+    : std::runtime_error{msg} {}
+
+User_message_exception::User_message_exception(const char* const msg)
+    : std::runtime_error{msg} {}
 
 Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
   Parsed_arguments parsed_args{};
@@ -100,8 +106,9 @@ Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
       parsed_args.word_size = next_arg_to_int(argc, argv, arg_idx, "word_size");
       ++arg_idx;
     } else {
-      throw Argument_parse_error("Unrecognized optional argument provided: " +
-                                 std::string(argv[arg_idx]));
+      throw Argument_parse_exception(fmt::format(
+          "Unrecognized optional argument provided: {}",
+          argv[arg_idx]);
     }
     ++arg_idx;
   }
@@ -116,7 +123,7 @@ Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
     }
 
     if (prohibited_flag) {
-      throw Argument_parse_error(fmt::format(
+      throw Argument_parse_exception(fmt::format(
           "Cannot accept both the append flag and the {} flag, as the {} would "
           "have already been written to the block device.",
           prohibited_flag, prohibited_flag));
@@ -128,7 +135,7 @@ Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
     parsed_args.block_device = argv[arg_idx];
     ++arg_idx;
   } else {
-    throw Argument_parse_error(
+    throw Argument_parse_exception(
         "A positional argument naming the block device to write to must be "
         "provided.");
   }
@@ -142,7 +149,8 @@ Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
       ++arg_idx;
     }
   } else {
-    throw Argument_parse_error("At least one input wav file must be provided.");
+    throw Argument_parse_exception(
+        "At least one input wav file must be provided.");
   }
 
   return parsed_args;

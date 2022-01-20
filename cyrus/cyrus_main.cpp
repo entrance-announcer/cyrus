@@ -2,7 +2,6 @@
 
 #include <cyrus/cli.hpp>
 #include <cyrus/cyrus_main.hpp>
-#include <cyrus/user_message_exception.hpp>
 #include <cyrus/write_audio.hpp>
 
 namespace cyrus {
