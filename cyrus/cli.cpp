@@ -107,8 +107,7 @@ Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
       ++arg_idx;
     } else {
       throw Argument_parse_exception(fmt::format(
-          "Unrecognized optional argument provided: {}",
-          argv[arg_idx]);
+          "Unrecognized optional argument provided: {}", argv[arg_idx]));
     }
     ++arg_idx;
   }

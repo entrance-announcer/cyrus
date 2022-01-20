@@ -11,7 +11,7 @@ int main(const int argc, const char* const argv[]) {
 
   try {
     args = cyrus::parse_arguments(argc, argv);
-  } catch (const cyrus::Argument_parse_error& e) {
+  } catch (const cyrus::Argument_parse_exception& e) {
     fmt::print(stderr, "{}\n", e.what());
     return 1;
   }

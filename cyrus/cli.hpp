@@ -24,10 +24,12 @@ std::string help_message();
 Parsed_arguments parse_arguments(int argc, const char* const argv[]);
 
 class Argument_parse_exception : public std::runtime_error {
+ public:
   explicit Argument_parse_exception(const std::string&);
 };
 
 class User_message_exception : public std::runtime_error {
+ public:
   explicit User_message_exception(const std::string&);
   explicit User_message_exception(const char*);
 };
