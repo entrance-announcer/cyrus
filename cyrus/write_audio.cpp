@@ -4,8 +4,8 @@
 
 #include <cerrno>
 #include <cstring>  // strerror, std::size_t
+#include <cyrus/audio_signal.hpp>
 #include <cyrus/device_probing.hpp>
-#include <cyrus/patched_audio_file.hpp>
 #include <cyrus/user_message_exception.hpp>
 #include <cyrus/write_audio.hpp>
 #include <filesystem>
@@ -14,11 +14,12 @@
 #include <vector>
 
 namespace fs = std::filesystem;
-using Audio_file = AudioFile<float>;
 
 namespace cyrus {
 
 namespace {
+
+using Audio_signal = Audio_signal<float>;
 
 using Block_device_path =
     std::remove_cvref_t<decltype(Parsed_arguments::block_device)>;
@@ -68,10 +69,10 @@ void throw_invalid_block_device(const Block_device_path& block_device) {
 using Audio_file_paths =
     std::remove_cvref_t<decltype(Parsed_arguments::audio_files)>;
 
-[[nodiscard]] std::vector<Audio_file> load_audio_files(
+[[nodiscard]] std::vector<Audio_signal> load_audio_files(
     const Audio_file_paths& audio_file_paths) {
-  std::vector<Audio_file> audio_files;
-  audio_files.reserve(audio_file_paths.size());
+  std::vector<Audio_signal> audio_signals;
+  audio_signals.reserve(audio_file_paths.size());
 
   for (const auto& audio_file_path : audio_file_paths) {
     try {
@@ -83,16 +84,21 @@ using Audio_file_paths =
       throw User_message_exception(err.what());
     }
 
-    Audio_file audio_file;
-    if (const bool loaded = audio_file.load(audio_file_path); !loaded) {
+    Audio_signal audio_signal;
+    if (const auto errc = audio_signal.load(audio_file_path);
+        errc == Audio_error_code::hit_eof) {
+      fmt::print("Warning: {}: {}\n", audio_error_message(errc),
+                 audio_file_path);
+    } else if (errc != Audio_error_code::no_error) {
       throw User_message_exception(
-          fmt::format("An error occurred while loading {}\n", audio_file_path));
+          fmt::format("An error occurred while loading {}: {}\n",
+                      audio_file_path, audio_error_message(errc)));
     }
-    audio_file.printSummary();
-    audio_files.push_back(std::move(audio_file));
+    fmt::print("audio size: {}\n", audio_signal.size());
+    audio_signals.push_back(std::move(audio_signal));
   }
 
-  return audio_files;
+  return audio_signals;
 }
 
 // TODO: clarify these, put somewhere else, configurable
@@ -115,9 +121,6 @@ void write_audio_to_device(const Parsed_arguments& args) {
 
   // length * sample_rate * sample_size * num_audio_files
   double total_length_sec = 0;
-  for (const auto& loaded_audio : loaded_audio_files) {
-    total_length_sec += loaded_audio.getLengthInSeconds();
-  }
 
   // TODO: get a more accurate measurement, including any headers and
   //  filesystem meta

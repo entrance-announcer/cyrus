@@ -51,7 +51,7 @@ set(CYRUS_DEFAULT_COMPILE_OPTIONS
         /W4
         /WX>)
 
-find_package(audiofile REQUIRED CONFIG)
+find_package(SndFile REQUIRED CONFIG)
 find_package(fmt REQUIRED CONFIG)
 
 enable_testing()

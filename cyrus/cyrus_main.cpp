@@ -18,7 +18,7 @@ int main(const int argc, const char* const argv[]) {
   }
 
   if (args.help) {
-    cyrus::print_help_message();
+    fmt::print("\n{}", cyrus::help_message());
     return 0;
   }
 

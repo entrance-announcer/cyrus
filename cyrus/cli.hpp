@@ -19,7 +19,7 @@ struct Parsed_arguments {
   int word_size{default_word_size};
 };
 
-void print_help_message();
+std::string help_message();
 
 Parsed_arguments parse_arguments(int argc, const char* const argv[]);
 

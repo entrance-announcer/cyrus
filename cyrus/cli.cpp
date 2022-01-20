@@ -1,8 +1,9 @@
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <charconv>
 #include <cstring>
 #include <cyrus/cli.hpp>
+#include <string>
 
 namespace cyrus {
 
@@ -74,8 +75,8 @@ int next_arg_to_int(const int argc, const char* const argv[],
 
 }  // namespace
 
-void print_help_message() {
-  fmt::print(help_message_fmt, default_bit_depth, default_word_size);
+std::string help_message() {
+  return fmt::format(help_message_fmt, default_bit_depth, default_word_size);
 }
 
 Argument_parse_error::Argument_parse_error(const std::string& msg)
