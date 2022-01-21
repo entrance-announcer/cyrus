@@ -40,9 +40,11 @@ const char* audio_error_message(const Audio_error_code errc) {
   return err_msg;
 }
 
+template <typename T, typename... Args>
+concept One_of = (std::same_as<T, Args> || ...);
+
 template <typename T>
-concept Libsndfile_sample = std::same_as<T, short> || std::same_as<T, int> ||
-    std::same_as<T, float> || std::same_as<T, double>;
+concept Libsndfile_sample = One_of<T, short, int, float, double>;
 
 // represents a single channel audio file, that is loaded from a single
 // (mono) or dual (stereo) channel audio file.
