@@ -10,13 +10,15 @@
 namespace cyrus {
 
 enum class Audio_error_code : int {
+  // covers error codes from libsndfile
   no_error,
   unrecognized_format,
   system_error,
   malformed_file,
   unsupported_encoding,
-  unsupported_number_of_channels,  // additional to those from libsndfile
-  hit_eof                          // additional to those from libsndfile
+  // additional to those from libsndfile
+  unsupported_number_of_channels,
+  hit_eof
 };
 
 const char* audio_error_message(const Audio_error_code errc) {
@@ -104,12 +106,14 @@ class Audio_signal {
 
     // convert any stereo data to mono by averaging channels
     if (this->sndfile_handle.channels() == stereo_chans) {
+      auto read_it = this->signal.cbegin();
       auto write_it = this->signal.begin();
-      for (auto read_it = this->signal.cbegin(); read_it < this->signal.end();
-           read_it += stereo_chans, write_it += mono_chans) {
-        const auto left_val = *read_it;
-        const auto right_val = *(read_it + 1);
-        *write_it = std::midpoint(left_val, right_val);
+      while (read_it < this->signal.end()) {
+        const auto left_sample = *read_it;
+        const auto right_sample = *(read_it + 1);
+        *write_it = std::midpoint(left_sample, right_sample);
+        read_it += stereo_chans;
+        write_it += mono_chans;
       }
     }
     this->resize_signal_sf(num_frames);
