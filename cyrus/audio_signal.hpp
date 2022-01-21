@@ -51,7 +51,7 @@ template <Libsndfile_sample T,
 class Audio_signal {
  private:
   constexpr static auto mono_chans = 1;
-  constexpr static auto stereo_chans = 1;
+  constexpr static auto stereo_chans = 2;
   SndfileHandle sndfile_handle{};
   std::vector<T, Alloc> signal{};
 
