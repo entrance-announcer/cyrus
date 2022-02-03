@@ -3,4 +3,4 @@ libsndfile/1.0.31
 fmt/8.1.1
 
 [generators]
-CMakeDeps
+cmake_find_package_multi

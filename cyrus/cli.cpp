@@ -26,7 +26,8 @@ constexpr const char* const help_message_fmt =
     "-a --append\tAppend audio_files to the block device instead of overwriting its contents.\n"
     "\t\tProhibits the use of -b, -w, and -s flags, for these values are already stored on disk.\n"
     "-b --bit_depth <int>\tNumber of bits to store written samples [Default {}]\n"
-    "-w --word_size <int>\tNumber of bytes per written word [Default {}]\n";
+    "-w --word_size <int>\tNumber of bytes per written word [Default {}]\n"
+    "-s --sample_rate <int>\tSamples/second to write audio [Default {}]\n";
 // clang-format on
 
 bool is_help_flag(const char* const arg) noexcept {
@@ -47,6 +48,10 @@ int is_bit_depth_flag(const char* const arg) noexcept {
 
 int is_word_size_flag(const char* const arg) noexcept {
   return c_starts_with(arg, "-w") || c_starts_with(arg, "--word_size");
+}
+
+int is_sample_rate_flag(const char* const arg) noexcept {
+  return c_starts_with(arg, "-s") || c_starts_with(arg, "--sample_rate");
 }
 
 int next_arg_to_int(const int argc, const char* const argv[],
@@ -76,7 +81,8 @@ int next_arg_to_int(const int argc, const char* const argv[],
 }  // namespace
 
 std::string help_message() {
-  return fmt::format(help_message_fmt, default_bit_depth, default_word_size);
+  return fmt::format(help_message_fmt, default_bit_depth, default_word_size,
+                     default_sample_rate);
 }
 
 Argument_parse_exception::Argument_parse_exception(const std::string& msg)
@@ -104,6 +110,10 @@ Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
       ++arg_idx;
     } else if (is_word_size_flag(argv[arg_idx])) {
       parsed_args.word_size = next_arg_to_int(argc, argv, arg_idx, "word_size");
+      ++arg_idx;
+    } else if (is_sample_rate_flag(argv[arg_idx])) {
+      parsed_args.sample_rate =
+          next_arg_to_int(argc, argv, arg_idx, "sample_rate");
       ++arg_idx;
     } else {
       throw Argument_parse_exception(fmt::format(
