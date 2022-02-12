@@ -33,6 +33,7 @@ set(CYRUS_DEFAULT_COMPILE_OPTIONS
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_BINARY_DIR}")
 find_package(SndFile REQUIRED CONFIG)
 find_package(fmt REQUIRED CONFIG)
+find_package(tl-expected REQUIRED CONFIG)
 
 add_subdirectory(cyrus)
 if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)

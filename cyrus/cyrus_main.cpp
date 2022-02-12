@@ -21,10 +21,8 @@ int main(const int argc, const char* const argv[]) {
     return 0;
   }
 
-  try {
-    cyrus::write_audio_to_device(args);
-  } catch (const cyrus::User_message_exception& e) {
-    fmt::print(stderr, "{}\n", e.what());
+  if (const auto w = cyrus::write_audio_to_device(args); !w) {
+    fmt::print(stderr, "{}\n", w.error());
     return 1;
   }
 

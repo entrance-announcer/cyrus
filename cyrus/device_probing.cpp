@@ -11,15 +11,20 @@
 #include <fstream>
 #include <optional>
 #include <system_error>
-#include <utility>
+#include <tl/expected.hpp>
 
 namespace fs = std::filesystem;
 
 namespace cyrus {
 
-std::optional<Block_mounting> read_mounting(const fs::path& block_device) {
+tl::expected<Block_mounting, std::error_code> read_mounting(
+    const fs::path& block_device) {
   std::fstream mtab("/proc/mounts", std::ios_base::in);
-  const fs::path canonical_path = fs::canonical(block_device);
+  std::error_code ec;
+  const fs::path canonical_path = fs::canonical(block_device, ec);
+  if (ec) {
+    return tl::make_unexpected(ec);
+  }
 
   std::string mtab_line;
   fs::path mounted_device;
@@ -35,7 +40,7 @@ std::optional<Block_mounting> read_mounting(const fs::path& block_device) {
     }
   }
 
-  return std::nullopt;
+  return Block_mounting::not_mounted;
 }
 
 bool is_block_device(const struct ::stat& device_status) noexcept {
@@ -49,22 +54,24 @@ bool is_disk_partition(const struct ::stat& device_status) noexcept {
   return partition_num != 0;
 }
 
-std::pair<std::size_t, std::error_code> total_size(
+tl::expected<std::size_t, std::error_code> total_size(
     const fs::path& block_device) noexcept {
+  using Unexpected = tl::unexpected<std::error_code>;
   const int fd = open(block_device.c_str(), O_RDONLY);
   if (fd == -1) {
-    return {false, {errno, std::generic_category()}};  // errno set by open
+    return tl::make_unexpected(std::error_code{errno, std::generic_category()});
   }
 
   std::size_t size;
   if (ioctl(fd, BLKGETSIZE64, &size) != 0) {
-    return {false, {errno, std::generic_category()}};  // errno set by ioctl
+    return Unexpected{{errno, std::generic_category()}};  // errno set by open
   }
 
   if (close(fd) != 0) {
-    return {false, {errno, std::generic_category()}};  // errno set by close
+    return Unexpected{{errno, std::generic_category()}};  // errno set by close
   }
-  return {size, {}};
+
+  return size;
 }
 
 }  // namespace cyrus

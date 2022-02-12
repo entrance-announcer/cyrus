@@ -30,10 +30,4 @@ class Argument_parse_exception : public std::runtime_error {
   explicit Argument_parse_exception(const std::string&);
 };
 
-class User_message_exception : public std::runtime_error {
- public:
-  explicit User_message_exception(const std::string&);
-  explicit User_message_exception(const char*);
-};
-
 }  // namespace cyrus

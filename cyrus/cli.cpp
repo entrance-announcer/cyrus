@@ -88,12 +88,6 @@ std::string help_message() {
 Argument_parse_exception::Argument_parse_exception(const std::string& msg)
     : std::runtime_error(msg) {}
 
-User_message_exception::User_message_exception(const std::string& msg)
-    : std::runtime_error{msg} {}
-
-User_message_exception::User_message_exception(const char* const msg)
-    : std::runtime_error{msg} {}
-
 Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
   Parsed_arguments parsed_args{};
   int arg_idx = 1;
