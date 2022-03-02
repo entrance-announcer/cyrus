@@ -1,77 +1,55 @@
-#include <fcntl.h>     // open
-#include <linux/fs.h>  // BLKGETSIZE64
-#include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <sys/sysmacros.h>  // minor
-#include <unistd.h>         // close
+#include <fmt/format.h>
 
-#include <cerrno>
+#include <algorithm>
 #include <cyrus/device_probing.hpp>
 #include <filesystem>
 #include <fstream>
-#include <optional>
+#include <stdexcept>
 #include <system_error>
 #include <tl/expected.hpp>
 
 namespace fs = std::filesystem;
+namespace rgs = std::ranges;
 
 namespace cyrus {
 
-tl::expected<Block_mounting, std::error_code> read_mounting(
-    const fs::path& block_device) {
-  std::fstream mtab("/proc/mounts", std::ios_base::in);
+tl::expected<Mount_points, std::error_code> read_mounting(
+    const std::filesystem::path& block_device) {
+  static const constexpr char delim = ' ';
+  static const constexpr char* mounts_file = "/etc/mtab";
+
+  std::fstream mtab(mounts_file, std::ios_base::in);
+  if (!mtab.is_open()) {
+    throw std::runtime_error(fmt::format(
+        "The file {} does not exists and is required to read device mounts.\n",
+        mounts_file));
+  }
+
+  // convert provided block device path to canonical path
   std::error_code ec;
   const fs::path canonical_path = fs::canonical(block_device, ec);
   if (ec) {
     return tl::make_unexpected(ec);
   }
 
+  // extract all mount points of block device or its partitions
+  Mount_points device_mounts{};
   std::string mtab_line;
   fs::path mounted_device;
   while (std::getline(mtab, mtab_line)) {
-    const auto delim_idx = static_cast<std::ptrdiff_t>(mtab_line.find(' '));
-    mounted_device.assign(mtab_line.cbegin(), mtab_line.cbegin() + delim_idx);
+    const auto device_end = rgs::find(mtab_line, delim);
+    mounted_device.assign(mtab_line.begin(), device_end);
 
     const auto comparison = canonical_path <=> mounted_device;
-    if (comparison == std::strong_ordering::equal) {
-      return Block_mounting::device_mounted;
-    } else if (comparison == std::strong_ordering::less) {
-      return Block_mounting::partition_mounted;
+    if (comparison != std::strong_ordering::greater) {
+      const auto mnt_point_end = std::find(device_end + 1, mtab_line.end(), delim);
+      const auto fs_name_end = std::find(mnt_point_end + 1, mtab_line.end(), delim);
+      device_mounts.insert({.path = {device_end + 1, mnt_point_end},
+                            .fs_name = {mnt_point_end + 1, fs_name_end}});
     }
   }
 
-  return Block_mounting::not_mounted;
-}
-
-bool is_block_device(const struct ::stat& device_status) noexcept {
-  const auto mode = device_status.st_mode;
-  return S_ISBLK(mode);
-}
-
-bool is_disk_partition(const struct ::stat& device_status) noexcept {
-  const auto device_id = device_status.st_rdev;
-  const auto partition_num = minor(device_id);
-  return partition_num != 0;
-}
-
-tl::expected<std::size_t, std::error_code> total_size(
-    const fs::path& block_device) noexcept {
-  using Unexpected = tl::unexpected<std::error_code>;
-  const int fd = open(block_device.c_str(), O_RDONLY);
-  if (fd == -1) {
-    return tl::make_unexpected(std::error_code{errno, std::generic_category()});
-  }
-
-  std::size_t size;
-  if (ioctl(fd, BLKGETSIZE64, &size) != 0) {
-    return Unexpected{{errno, std::generic_category()}};  // errno set by open
-  }
-
-  if (close(fd) != 0) {
-    return Unexpected{{errno, std::generic_category()}};  // errno set by close
-  }
-
-  return size;
+  return device_mounts;
 }
 
 }  // namespace cyrus

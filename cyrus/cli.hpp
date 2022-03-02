@@ -1,8 +1,9 @@
 #pragma once
 
+#include <cyrus/cyrus_main.hpp>
 #include <filesystem>
-#include <stdexcept>
 #include <string>
+#include <tl/expected.hpp>
 #include <vector>
 
 namespace cyrus {
@@ -23,11 +24,6 @@ struct Parsed_arguments {
 
 std::string help_message();
 
-Parsed_arguments parse_arguments(int argc, const char* const argv[]);
-
-class Argument_parse_exception : public std::runtime_error {
- public:
-  explicit Argument_parse_exception(const std::string&);
-};
+tl::expected<Parsed_arguments, std::string> parse_arguments(Program_arguments prog_args);
 
 }  // namespace cyrus

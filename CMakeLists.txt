@@ -19,16 +19,16 @@ option(BUILD_TESTING "Build all project tests" OFF)
 
 enable_testing()
 set(CYRUS_DEFAULT_COMPILE_OPTIONS
-        $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Wconversion
-        -Wsign-conversion
-        -Weffc++>
-        $<$<CXX_COMPILER_ID:MSVC>:
-        /W4
-        /WX>)
+  $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+  -Wall
+  -Wextra
+  -Wpedantic
+  -Wconversion
+  -Wsign-conversion
+  -Weffc++>
+  $<$<CXX_COMPILER_ID:MSVC>:
+  /W4
+  /WX>)
 
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_BINARY_DIR}")
 find_package(SndFile REQUIRED CONFIG)
@@ -37,5 +37,5 @@ find_package(tl-expected REQUIRED CONFIG)
 
 add_subdirectory(cyrus)
 if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
-    add_subdirectory(tests)
+  add_subdirectory(tests)
 endif ()

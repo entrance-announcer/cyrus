@@ -1,9 +1,10 @@
 #include <fmt/format.h>
 
 #include <charconv>
-#include <cstring>
 #include <cyrus/cli.hpp>
+#include <cyrus/try.hpp>
 #include <string>
+#include <tl/expected.hpp>
 
 namespace cyrus {
 
@@ -15,7 +16,7 @@ constexpr const char* const help_message_fmt =
     " Write the provided wav and aiff files to the block device\n"
     "\n"
     "Ex. 1: cyrus /dev/nvme0n1 ordinary_girl.aiff nobodys_perfect.wav who_said.wav\n"
-    "Ex. 2: cyrus -b=24 -w=32 /dev/nvme0n1 he_coule_be_the_one.aif\n"
+    "Ex. 2: cyrus -b=24 -w=2 /dev/nvme0n1 he_coule_be_the_one.aif\n"
     "\n"
     "Positional Arguments:\n"
     "block_device\tDestination block device\n"
@@ -30,94 +31,92 @@ constexpr const char* const help_message_fmt =
     "-s --sample_rate <int>\tSamples/second to write audio [Default {}]\n";
 // clang-format on
 
-bool is_help_flag(const char* const arg) noexcept {
-  return std::strcmp(arg, "-h") == 0 || std::strcmp(arg, "--help") == 0;
+[[nodiscard]] bool is_help_flag(const Program_argument arg) noexcept {
+  return arg == "-h" || arg == "--help";
 }
 
-bool is_append_flag(const char* const arg) noexcept {
-  return std::strcmp(arg, "-a") == 0 || std::strcmp(arg, "--append") == 0;
+[[nodiscard]] bool is_append_flag(const Program_argument arg) noexcept {
+  return arg == "-a" || arg == "--append";
 }
 
-bool c_starts_with(const char* const str, const char* const prefix) {
-  return strncmp(prefix, str, strlen(prefix)) == 0;
+[[nodiscard]] bool is_bit_depth_flag(const Program_argument arg) noexcept {
+  return arg.starts_with("-b") || arg.starts_with("--bit_depth");
 }
 
-int is_bit_depth_flag(const char* const arg) noexcept {
-  return c_starts_with(arg, "-b") || c_starts_with(arg, "--bit_depth");
+[[nodiscard]] bool is_word_size_flag(const Program_argument arg) noexcept {
+  return arg.starts_with("-w") || arg.starts_with("--word_size");
 }
 
-int is_word_size_flag(const char* const arg) noexcept {
-  return c_starts_with(arg, "-w") || c_starts_with(arg, "--word_size");
+[[nodiscard]] bool is_sample_rate_flag(const Program_argument arg) noexcept {
+  return arg.starts_with("-s") || arg.starts_with("--sample_rate");
 }
 
-int is_sample_rate_flag(const char* const arg) noexcept {
-  return c_starts_with(arg, "-s") || c_starts_with(arg, "--sample_rate");
-}
-
-int next_arg_to_int(const int argc, const char* const argv[],
-                    const int flag_arg_idx, const char* const option_name) {
-  // read next argument (that following the flag); where the value should be
-  const int val_arg_idx = flag_arg_idx + 1;
-  if (val_arg_idx >= argc) {
-    throw Argument_parse_exception(
-        fmt::format("Expected an integer value following the provided {} flag, "
-                    "{}.",
-                    option_name, argv[flag_arg_idx]));
+[[nodiscard]] tl::expected<int, std::string> next_arg_to_int(
+    const Program_arguments prog_args, const std::string_view option_name) {
+  if (prog_args.size() < 2) {
+    return tl::make_unexpected(
+        fmt::format("Expected an integer value following the provided {} flag, {}.",
+                    option_name, prog_args.front()));
   }
 
-  // parse the value argument to an int
-  int val;
-  const char* const val_arg = argv[val_arg_idx];
+  // parse the argument to an int
+  int parsed_int;
+  const auto int_arg = *(prog_args.begin() + 1);
   if (const auto result =
-          std::from_chars(val_arg, val_arg + std::strlen(val_arg), val);
+          std::from_chars(int_arg.data(), int_arg.data() + int_arg.size(), parsed_int);
       result.ec != std::errc{}) {
-    throw Argument_parse_exception(fmt::format(
-        "Failed parsing argument {} to an integer for option {}: {}\n",
-        result.ptr, option_name, std::strerror(static_cast<int>(result.ec))));
+    return tl::make_unexpected(
+        fmt::format("Failed parsing argument {} to an integer for option {}: {}\n",
+                    result.ptr, option_name, std::strerror(static_cast<int>(result.ec))));
   }
-  return val;
+  return parsed_int;
 }
 
-}  // namespace
-
-std::string help_message() {
-  return fmt::format(help_message_fmt, default_bit_depth, default_word_size,
-                     default_sample_rate);
-}
-
-Argument_parse_exception::Argument_parse_exception(const std::string& msg)
-    : std::runtime_error(msg) {}
-
-Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
+struct Parse_context {
+  Program_arguments prog_args{};
   Parsed_arguments parsed_args{};
-  int arg_idx = 1;
+};
 
-  // parse options
-  while (arg_idx < argc && argv[arg_idx][0] == '-') {
-    if (is_help_flag(argv[arg_idx])) {
-      parsed_args.help = true;
-      return parsed_args;
-    } else if (is_append_flag(argv[arg_idx])) {
-      parsed_args.append = true;
-    } else if (is_bit_depth_flag(argv[arg_idx])) {
-      parsed_args.bit_depth = next_arg_to_int(argc, argv, arg_idx, "bit_depth");
-      ++arg_idx;
-    } else if (is_word_size_flag(argv[arg_idx])) {
-      parsed_args.word_size = next_arg_to_int(argc, argv, arg_idx, "word_size");
-      ++arg_idx;
-    } else if (is_sample_rate_flag(argv[arg_idx])) {
-      parsed_args.sample_rate =
-          next_arg_to_int(argc, argv, arg_idx, "sample_rate");
-      ++arg_idx;
+[[nodiscard]] tl::expected<Parse_context, std::string> strip_exec_name(
+    const Parse_context& ctx) {
+  return Parse_context{.prog_args = {ctx.prog_args.begin() + 1, ctx.prog_args.end()},
+                       .parsed_args = ctx.parsed_args};
+}
+
+[[nodiscard]] tl::expected<Parse_context, std::string> parse_options(Parse_context ctx) {
+  auto& parsed_opts = ctx.parsed_args;
+  auto prog_arg_it = ctx.prog_args.begin();
+  const auto last = ctx.prog_args.end();
+  for (; prog_arg_it < ctx.prog_args.end() && prog_arg_it->front() == '-';
+       ++prog_arg_it) {
+    if (is_help_flag(*prog_arg_it)) {
+      parsed_opts.help = true;
+      break;
+    } else if (is_append_flag(*prog_arg_it)) {
+      parsed_opts.append = true;
+    } else if (is_bit_depth_flag(*prog_arg_it)) {
+      TRY(parsed_opts.bit_depth, next_arg_to_int({prog_arg_it, last}, "bit_depth"))
+      ++prog_arg_it;
+    } else if (is_word_size_flag(*prog_arg_it)) {
+      TRY(parsed_opts.word_size, next_arg_to_int({prog_arg_it, last}, "word_size"))
+      ++prog_arg_it;
+    } else if (is_sample_rate_flag(*prog_arg_it)) {
+      TRY(parsed_opts.sample_rate, next_arg_to_int({prog_arg_it, last}, "sample_rate"))
+      ++prog_arg_it;
     } else {
-      throw Argument_parse_exception(fmt::format(
-          "Unrecognized optional argument provided: {}", argv[arg_idx]));
+      return tl::make_unexpected(
+          fmt::format("Unrecognized optional argument provided: {}", *prog_arg_it));
     }
-    ++arg_idx;
   }
 
-  // check mutually exclusive options
-  if (parsed_args.append) {
+  return Parse_context{.prog_args = {prog_arg_it, last}, .parsed_args = parsed_opts};
+}
+
+
+[[nodiscard]] tl::expected<Parse_context, std::string> verify_options(
+    const Parse_context& ctx) {
+  // check if multiple mutually exclusive options were provided
+  if (const auto& parsed_args = ctx.parsed_args; parsed_args.append) {
     const char* prohibited_flag = nullptr;
     if (parsed_args.bit_depth) {
       prohibited_flag = "bit_depth";
@@ -126,37 +125,73 @@ Parsed_arguments parse_arguments(const int argc, const char* const argv[]) {
     }
 
     if (prohibited_flag) {
-      throw Argument_parse_exception(fmt::format(
+      return tl::make_unexpected(fmt::format(
           "Cannot accept both the append flag and the {} flag, as the {} would "
           "have already been written to the block device.",
           prohibited_flag, prohibited_flag));
     }
   }
 
-  // parse block device
-  if (arg_idx < argc) {
-    parsed_args.block_device = argv[arg_idx];
-    ++arg_idx;
-  } else {
-    throw Argument_parse_exception(
-        "A positional argument naming the block device to write to must be "
-        "provided.");
+  // check that word size can store sample size
+  static const constexpr auto bits_per_byte = 8;
+  if (const auto word_size_bits = ctx.parsed_args.word_size * bits_per_byte;
+      ctx.parsed_args.bit_depth > word_size_bits) {
+    return tl::make_unexpected(fmt::format(
+        "The word size of {} ({} bits) is not large enough to store "
+        "samples of {} bits.\n",
+        ctx.parsed_args.word_size, word_size_bits, ctx.parsed_args.bit_depth));
   }
 
-  // parse input wav files
-  if (arg_idx < argc) {
-    using size_type = decltype(parsed_args.audio_files)::size_type;
-    parsed_args.audio_files.reserve(static_cast<size_type>(argc - arg_idx - 1));
-    while (arg_idx < argc) {
-      parsed_args.audio_files.emplace_back(argv[arg_idx]);
-      ++arg_idx;
+  return ctx;
+}
+
+[[nodiscard]] tl::expected<Parse_context, std::string> parse_block_device(
+    Parse_context ctx) {
+  const auto prog_args = ctx.prog_args;
+  if (!prog_args.empty()) {
+    ctx.parsed_args.block_device = prog_args.front();
+  } else {
+    return tl::make_unexpected(
+        "A positional argument naming the block device to write to must be provided.");
+  }
+
+  return Parse_context{.prog_args = {prog_args.begin() + 1, prog_args.end()},
+                       .parsed_args = ctx.parsed_args};
+}
+
+
+[[nodiscard]] tl::expected<Parse_context, std::string> parse_audio_files(
+    Parse_context ctx) {
+  auto& parsed_args = ctx.parsed_args;
+  if (const auto prog_args = ctx.prog_args; !prog_args.empty()) {
+    parsed_args.audio_files.reserve(prog_args.size());
+    for (const auto arg : prog_args) {
+      parsed_args.audio_files.push_back(arg);
     }
   } else {
-    throw Argument_parse_exception(
-        "At least one input wav file must be provided.");
+    return tl::make_unexpected("At least one input audio file must be provided.");
   }
 
-  return parsed_args;
+  return Parse_context{.prog_args = {}, .parsed_args = parsed_args};
+}
+
+
+}  // namespace
+
+std::string help_message() {
+  return fmt::format(help_message_fmt, default_bit_depth, default_word_size,
+                     default_sample_rate);
+}
+
+tl::expected<Parsed_arguments, std::string> parse_arguments(
+    const Program_arguments prog_args) {
+  Parse_context ctx;
+  return strip_exec_name({prog_args, Parsed_arguments{}})
+      .and_then(parse_options)
+      .and_then(verify_options)
+      .and_then(parse_block_device)
+      .and_then(parse_audio_files)
+      .map([](const auto parse_ctx) { return parse_ctx.parsed_args; });
 }
 
 }  // namespace cyrus

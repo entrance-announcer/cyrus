@@ -30,8 +30,7 @@ const char* audio_error_message(const Audio_error_code errc) {
           "channels.";
       break;
     case Audio_error_code::hit_eof:
-      err_msg =
-          "Hit EOF while loading audio file before all samples were decoded.";
+      err_msg = "Hit EOF while loading audio file before all samples were decoded.";
       break;
     default:
       err_msg = sf_error_number(static_cast<int>(errc));
@@ -48,8 +47,7 @@ concept Libsndfile_sample = One_of<T, short, int, float, double>;
 
 // represents a single channel audio file, that is loaded from a single
 // (mono) or dual (stereo) channel audio file.
-template <Libsndfile_sample T,
-          typename Alloc = typename std::vector<T>::allocator_type>
+template <Libsndfile_sample T, typename Alloc = typename std::vector<T>::allocator_type>
 class Audio_signal {
  private:
   constexpr static auto mono_chans = 1;
@@ -99,8 +97,7 @@ class Audio_signal {
     const auto num_frames = this->sndfile_handle.frames();
     const sf_count_t num_items = num_frames * num_channels;
     this->resize_signal_sf(num_items);
-    if (const auto num_read =
-            this->sndfile_handle.read(this->signal.data(), num_items);
+    if (const auto num_read = this->sndfile_handle.read(this->signal.data(), num_items);
         num_read < num_items) {
       result = Audio_error_code::hit_eof;
       this->resize_signal_sf(num_read);
@@ -125,21 +122,15 @@ class Audio_signal {
 
   [[nodiscard]] int format() const { return this->sndfile_handle.format(); }
 
-  [[nodiscard]] int sample_rate() const {
-    return this->sndfile_handle.samplerate();
-  }
+  [[nodiscard]] int sample_rate() const { return this->sndfile_handle.samplerate(); }
 
   [[nodiscard]] iterator begin() noexcept { return this->signal.begin(); }
 
   [[nodiscard]] iterator end() noexcept { return this->signal.end(); }
 
-  [[nodiscard]] const_iterator cbegin() const noexcept {
-    return this->signal.cbegin();
-  }
+  [[nodiscard]] const_iterator cbegin() const noexcept { return this->signal.cbegin(); }
 
-  [[nodiscard]] const_iterator cend() const noexcept {
-    return this->signal.cend();
-  }
+  [[nodiscard]] const_iterator cend() const noexcept { return this->signal.cend(); }
 
   // number of samples
   [[nodiscard]] size_type size() const noexcept { return this->signal.size(); }

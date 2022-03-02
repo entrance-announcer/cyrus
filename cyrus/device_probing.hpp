@@ -2,22 +2,22 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <optional>
+#include <set>
 #include <tl/expected.hpp>
-#include <utility>
 
 namespace cyrus {
 
-enum class Block_mounting { not_mounted, device_mounted, partition_mounted };
+struct Mount_point {
+  std::filesystem::path path{};
+  std::string fs_name{};
+  friend bool operator<(const Mount_point& m1, const Mount_point& m2) {
+    return m1.path < m2.path;
+  }
+};
 
-tl::expected<Block_mounting, std::error_code> read_mounting(
+using Mount_points = std::set<Mount_point>;
+
+[[nodiscard]] tl::expected<Mount_points, std::error_code> read_mounting(
     const std::filesystem::path& block_device);
-
-bool is_block_device(const struct stat& device_status) noexcept;
-
-bool is_disk_partition(const struct stat& device_status) noexcept;
-
-tl::expected<std::size_t, std::error_code> total_size(
-    const std::filesystem::path& block_device) noexcept;
 
 }  // namespace cyrus

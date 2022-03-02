@@ -6,22 +6,23 @@
 
 namespace cyrus {
 
-int main(const int argc, const char* const argv[]) {
-  cyrus::Parsed_arguments args;
-
-  try {
-    args = cyrus::parse_arguments(argc, argv);
-  } catch (const cyrus::Argument_parse_exception& e) {
-    fmt::print(stderr, "{}\n", e.what());
-    return 1;
+int cmain(const Program_arguments prog_args) {
+  const auto parsed =
+      cyrus::parse_arguments(prog_args).map_error([](const auto& err_msg) {
+        fmt::print(stderr, "{}\n", err_msg);
+        return 1;
+      });
+  if (!parsed) {
+    return parsed.error();
   }
+  const auto& parsed_args = parsed.value();
 
-  if (args.help) {
+  if (parsed_args.help) {
     fmt::print("\n{}", cyrus::help_message());
     return 0;
   }
 
-  if (const auto w = cyrus::write_audio_to_device(args); !w) {
+  if (const auto w = cyrus::write_audio_to_device(parsed_args); !w) {
     fmt::print(stderr, "{}\n", w.error());
     return 1;
   }

@@ -1,5 +1,6 @@
 #include <fmt/core.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 #include <sys/stat.h>
 
 #include <cerrno>
@@ -9,11 +10,15 @@
 #include <cyrus/device_probing.hpp>
 #include <cyrus/write_audio.hpp>
 #include <filesystem>
+#include <ranges>
+#include <tl/expected.hpp>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace fs = std::filesystem;
+namespace rgs = std::ranges;
+namespace vws = rgs::views;
 
 namespace cyrus {
 
@@ -21,54 +26,10 @@ namespace {
 
 using Audio_signal_t = Audio_signal<float>;
 
-using Block_device_path =
-    std::remove_cvref_t<decltype(Parsed_arguments::block_device)>;
+using Audio_file_paths = std::remove_cvref_t<decltype(Parsed_arguments::audio_files)>;
 
-tl::expected<void, std::string> validate_block_device(
-    const Block_device_path& block_device) {
-  // get device status
-  struct stat device_status {};
-  if (const auto err = stat(block_device.c_str(), &device_status); err) {
-    // failed obtaining device status. Still show as error msg to user, as
-    // this is commonly a consequence of improper usage, such as invalid user
-    // permissions
-    return tl::make_unexpected(
-        fmt::format("{}: {}", block_device, std::strerror(errno)));
-  }
-
-  if (!cyrus::is_block_device(device_status)) {
-    return tl::make_unexpected(
-        fmt::format("{}: {}", block_device, std::strerror(errno)));
-  }
-
-  if (cyrus::is_disk_partition(device_status)) {
-    return tl::make_unexpected(
-        fmt::format("{} is a disk partition, not the root block device. Please "
-                    "provide the root block device.",
-                    block_device));
-  }
-
-  // read device's mounting
-  if (const auto device_mounting = cyrus::read_mounting(block_device);
-      device_mounting) {
-    if (device_mounting != Block_mounting::not_mounted) {
-      return tl::make_unexpected(
-          device_mounting.value() == cyrus::Block_mounting::partition_mounted
-              ? "The block device must not have mounted partitions."
-              : "The block device must not be mounted.");
-    }
-  } else {
-    return tl::make_unexpected(device_mounting.error().message());
-  }
-
-  return {};
-}
-
-using Audio_file_paths =
-    std::remove_cvref_t<decltype(Parsed_arguments::audio_files)>;
-
-[[nodiscard]] tl::expected<std::vector<Audio_signal_t>, std::string>
-load_audio_files(const Audio_file_paths& audio_file_paths) {
+[[nodiscard]] tl::expected<std::vector<Audio_signal_t>, std::string> load_audio_files(
+    const Audio_file_paths& audio_file_paths) {
   std::vector<Audio_signal_t> audio_signals;
   audio_signals.reserve(audio_file_paths.size());
 
@@ -81,12 +42,10 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
     Audio_signal_t audio_signal;
     if (const auto errc = audio_signal.load(audio_file_path);
         errc == Audio_error_code::hit_eof) {
-      fmt::print("Warning: {}: {}\n", audio_error_message(errc),
-                 audio_file_path);
+      fmt::print("Warning: {}: {}\n", audio_error_message(errc), audio_file_path);
     } else if (errc != Audio_error_code::no_error) {
-      return tl::make_unexpected(
-          fmt::format("An error occurred while loading {}: {}\n",
-                      audio_file_path, audio_error_message(errc)));
+      return tl::make_unexpected(fmt::format("An error occurred while loading {}: {}\n",
+                                             audio_file_path, audio_error_message(errc)));
     }
 
     fmt::print("audio size: {}\n", audio_signal.size());
@@ -98,11 +57,52 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
 
 }  // namespace
 
-tl::expected<void, std::string> write_audio_to_device(
-    const Parsed_arguments& args) {
-  if (auto v = validate_block_device(args.block_device); !v) {
-    return v;
+tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& args) {
+  // check if device exists
+  if (!fs::exists(args.block_device)) {
+    return tl::make_unexpected(
+        fmt::format("The block device {} does not exist.\n", args.block_device));
   }
+
+  // check if it's a block device
+  if (!fs::is_block_file(args.block_device)) {
+    return tl::make_unexpected(
+        fmt::format("The file {} is not a block file.\n", args.block_device));
+  }
+
+  // get mount points of the provided device and any of its partitions
+  const auto mount_points = read_mounting(args.block_device);
+  if (!mount_points) {
+    return tl::make_unexpected(mount_points.error().message());
+  }
+
+  // check if the provided device has partitions
+  // if it has partitions that aren't what was provided -> error
+  if (mount_points.value().size() == 0) {
+    return tl::make_unexpected(
+        fmt::format("The device {} is not mounted.\n", args.block_device));
+
+  } else if (mount_points.value().size() > 1) {
+    const auto mount_paths =
+        mount_points.value() | vws::transform([](const auto& m) { return m.path; });
+
+    return tl::make_unexpected(
+        fmt::format("The device {} has multiple mounted partitions. This will "
+                    "not be readable by Miley. Mount points: {}\n",
+                    args.block_device, mount_paths));
+  }
+
+  // get mount point of provided path
+  const auto mount_point = *mount_points.value().cbegin();
+
+  // check that filesystem of provided path is FAT
+  if (mount_point.fs_name != "vfat") {
+    return tl::make_unexpected(
+        fmt::format("The block device, {}, is incorrectly formatted with the {} "
+                    "filesystem. It must be formatted in the FAT32 filesystem.",
+                    args.block_device, mount_point.fs_name));
+  }
+
   fmt::print("Verified block device {}\n", args.block_device);
 
   // load all audio files before writing, to ensure they can all be
@@ -119,12 +119,11 @@ tl::expected<void, std::string> write_audio_to_device(
 
   // TODO: get a more accurate measurement, including any headers and
   //  filesystem meta
-  auto total_write_size = static_cast<std::size_t>(
-      total_length_sec * args.sample_rate * args.word_size *
-      static_cast<float>(loaded_audio_files.size()));
+  auto total_write_size =
+      static_cast<std::size_t>(total_length_sec * args.sample_rate * args.word_size *
+                               static_cast<float>(loaded_audio_files.size()));
 
-  if (const auto dev_size = cyrus::total_size(args.block_device);
-      dev_size.value() < total_write_size * 2) {
+  if (const auto dev_size = 1E7; dev_size < total_write_size * 2) {
     return tl::make_unexpected(
         "Cannot write the audio files to the provided block "
         "device, as it isn't large enough.");
