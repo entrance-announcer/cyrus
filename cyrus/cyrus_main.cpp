@@ -16,7 +16,6 @@ int cmain(const Program_arguments prog_args) {
     return parsed.error();
   }
   const auto& parsed_args = parsed.value();
-
   if (parsed_args.help) {
     fmt::print("\n{}", cyrus::help_message());
     return 0;

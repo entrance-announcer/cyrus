@@ -3,6 +3,7 @@
 #include <cyrus/cyrus_main.hpp>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <tl/expected.hpp>
 #include <vector>
 
@@ -24,6 +25,10 @@ struct Parsed_arguments {
 
 std::string help_message();
 
-tl::expected<Parsed_arguments, std::string> parse_arguments(Program_arguments prog_args);
+[[nodiscard]] tl::expected<Parsed_arguments, std::string> parse_arguments(
+    Program_arguments prog_args);
+
+[[nodiscard]] bool user_accept_dialog(std::string_view, std::string_view,
+                                      std::string_view);
 
 }  // namespace cyrus

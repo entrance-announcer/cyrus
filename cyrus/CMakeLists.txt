@@ -6,7 +6,8 @@ add_library(cyrus_objects OBJECT
   write_audio.hpp write_audio.cpp
   cyrus_main.hpp cyrus_main.cpp
   audio_signal.hpp
-  try.hpp)
+  try.hpp
+  fs_header.hpp)
 target_include_directories(cyrus_objects PUBLIC "${PROJECT_SOURCE_DIR}")
 target_compile_options(cyrus_objects PRIVATE "${CYRUS_DEFAULT_COMPILE_OPTIONS}")
 target_link_libraries(cyrus_objects PUBLIC tl::expected PRIVATE fmt::fmt SndFile::sndfile)

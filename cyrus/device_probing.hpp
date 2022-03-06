@@ -2,22 +2,26 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <set>
+#include <map>
+#include <string>
 #include <tl/expected.hpp>
+#include <vector>
 
 namespace cyrus {
 
-struct Mount_point {
-  std::filesystem::path path{};
+struct Mounting {
+  std::filesystem::path mount_point{};
   std::string fs_name{};
-  friend bool operator<(const Mount_point& m1, const Mount_point& m2) {
-    return m1.path < m2.path;
-  }
 };
 
-using Mount_points = std::set<Mount_point>;
+// device -> mounting
+using Mountings = std::map<std::filesystem::path, Mounting>;
 
-[[nodiscard]] tl::expected<Mount_points, std::error_code> read_mounting(
-    const std::filesystem::path& block_device);
+[[nodiscard]] tl::expected<Mountings, std::error_code> read_mounting(
+    const std::filesystem::path&);
+
+// reads all block devices that are part of the same physical drive as that provided
+[[nodiscard]] std::vector<std::filesystem::path> read_drive_partitions(
+    const std::filesystem::path&);
 
 }  // namespace cyrus

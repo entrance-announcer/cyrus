@@ -3,6 +3,7 @@
 #include <charconv>
 #include <cyrus/cli.hpp>
 #include <cyrus/try.hpp>
+#include <iostream>
 #include <string>
 #include <tl/expected.hpp>
 
@@ -166,7 +167,7 @@ struct Parse_context {
   if (const auto prog_args = ctx.prog_args; !prog_args.empty()) {
     parsed_args.audio_files.reserve(prog_args.size());
     for (const auto arg : prog_args) {
-      parsed_args.audio_files.push_back(arg);
+      parsed_args.audio_files.emplace_back(arg);
     }
   } else {
     return tl::make_unexpected("At least one input audio file must be provided.");
@@ -185,13 +186,39 @@ std::string help_message() {
 
 tl::expected<Parsed_arguments, std::string> parse_arguments(
     const Program_arguments prog_args) {
-  Parse_context ctx;
   return strip_exec_name({prog_args, Parsed_arguments{}})
       .and_then(parse_options)
-      .and_then(verify_options)
-      .and_then(parse_block_device)
-      .and_then(parse_audio_files)
-      .map([](const auto parse_ctx) { return parse_ctx.parsed_args; });
+      .and_then([](auto ctx) {
+        if (ctx.parsed_args.help) {
+          return tl::expected<Parse_context, std::string>(ctx);
+        }
+        return verify_options(ctx)
+            .and_then(parse_block_device)
+            .and_then(parse_audio_files);
+      })
+      .map([](const auto c) { return c.parsed_args; });
 }
+
+bool user_accept_dialog(const std::string_view message,
+                        std::string_view accept_option = "y",
+                        std::string_view decline_option = "n") {
+  static const constexpr char* const trim_chars = " \t\n\r";
+  std::string user_input;
+  while (true) {
+    fmt::print("{}: [{}/{}]: ", message, accept_option, decline_option);
+    std::getline(std::cin, user_input);
+    user_input.erase(user_input.find_last_not_of(trim_chars) + 1);  // suffixing spaces
+    user_input.erase(0, user_input.find_first_not_of(trim_chars));  // prefixing spaces
+    if (user_input == accept_option) {
+      return true;
+    } else if (user_input == decline_option) {
+      return false;
+    } else {
+      fmt::print("Selection '{}' doesn't conform to options of '{}' or '{}'\n",
+                 user_input, accept_option, decline_option);
+    }
+  }
+}
+
 
 }  // namespace cyrus
