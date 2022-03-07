@@ -89,13 +89,13 @@ struct Parse_context {
       parsed_opts.help = true;
       break;
     } else if (is_bit_depth_flag(*prog_arg_it)) {
-      TRY(parsed_opts.bit_depth, next_arg_to_int({prog_arg_it, last}, "bit_depth"))
+      parsed_opts.bit_depth = TRY(next_arg_to_int({prog_arg_it, last}, "bit_depth"));
       ++prog_arg_it;
     } else if (is_word_size_flag(*prog_arg_it)) {
-      TRY(parsed_opts.word_size, next_arg_to_int({prog_arg_it, last}, "word_size"))
+      parsed_opts.word_size = TRY(next_arg_to_int({prog_arg_it, last}, "word_size"));
       ++prog_arg_it;
     } else if (is_sample_rate_flag(*prog_arg_it)) {
-      TRY(parsed_opts.sample_rate, next_arg_to_int({prog_arg_it, last}, "_sample_rate"))
+      parsed_opts.sample_rate = TRY(next_arg_to_int({prog_arg_it, last}, "_sample_rate"));
       ++prog_arg_it;
     } else {
       return tl::make_unexpected(

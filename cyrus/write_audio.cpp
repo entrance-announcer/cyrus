@@ -6,6 +6,7 @@
 #include <cyrus/cli.hpp>
 #include <cyrus/device_probing.hpp>
 #include <cyrus/sample_conversions.hpp>
+#include <cyrus/try.hpp>
 #include <cyrus/write_audio.hpp>
 #include <filesystem>
 #include <fstream>
@@ -46,6 +47,7 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
     }
 
     audio_signals.emplace_back(audio_file_path, std::move(audio_signal));
+    fmt::print("\t✔ loaded {}\n", audio_file_path);
   }
 
   return audio_signals;
@@ -107,38 +109,9 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
   return mount_it->second;
 }
 
-}  // namespace
-
-tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& args) {
-  if (auto dev_valid = block_device_validity_checks(args.block_device); !dev_valid) {
-    return dev_valid;
-  }
-
-  const auto mounting_e = get_destination_mounting(args.block_device);
-  if (!mounting_e) {
-    return tl::make_unexpected(mounting_e.error());
-  }
-  const auto& mounting = mounting_e.value();
-
-  // check that filesystem of provided path is FAT
-  if (mounting.fs_name != "vfat") {
-    return tl::make_unexpected(
-        fmt::format("The block device, {}, is incorrectly formatted with the {} "
-                    "filesystem. It must be formatted in the FAT32 filesystem.",
-                    args.block_device, mounting.fs_name));
-  }
-  fmt::print("Verified block device {}\n", args.block_device);
-
-  // load all audio files before writing, to ensure they can all be
-  // first opened loaded without decoding issues.
-  const auto loaded = load_audio_files(args.audio_files);
-  if (!loaded) {
-    return tl::make_unexpected(loaded.error());
-  }
-  const auto& loaded_audios = loaded.value();
-  fmt::print("Loaded all audio files.\n");
-
-  // resample audio
+[[nodiscard]] tl::expected<std::vector<Audio_signal_t>, std::string> resample_audio(
+    const Parsed_arguments& args,
+    const std::vector<std::pair<fs::path, Audio_signal_t>>& loaded_audios) {
   std::vector<Audio_signal_t> resampled_audios;
   resampled_audios.reserve(loaded_audios.size());
   for (const auto& [in_audio_path, loaded_audio] : loaded_audios) {
@@ -148,7 +121,38 @@ tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& ar
                                              audio_error_message(resampled.error())));
     }
     resampled_audios.push_back(resampled.value());
+    fmt::print("\t✔ resampled {}\n", in_audio_path);
   }
+
+  return resampled_audios;
+}
+
+}  // namespace
+
+tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& args) {
+  fmt::print("Verifying block device {}... ", args.block_device);
+  REQ(block_device_validity_checks(args.block_device))
+
+  const auto mounting = TRY(get_destination_mounting(args.block_device));
+
+  // check that filesystem of provided path is FAT
+  if (mounting.fs_name != "vfat") {
+    return tl::make_unexpected(
+        fmt::format("The block device, {}, is incorrectly formatted with the {} "
+                    "filesystem. It must be formatted in the FAT32 filesystem.",
+                    args.block_device, mounting.fs_name));
+  }
+  fmt::print("✔\n");
+
+  // load all audio files before writing, to ensure they can all be
+  // first opened loaded without decoding issues.
+  fmt::print("Loading audio files... \n");
+  const auto loaded_audios = TRY(load_audio_files(args.audio_files));
+
+  // resample audio
+  fmt::print("Resampling audio to {} samples/s... \n", args.sample_rate);
+  const auto resampled_audios = TRY(resample_audio(args, loaded_audios));
+
 
   // ensure that specified device has sufficient available space
   const auto write_samples = std::accumulate(
@@ -164,7 +168,7 @@ tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& ar
 
   // prompt user before writing
   if (!user_accept_dialog(
-          fmt::format("Would you like to proceed to write {} raw audio file{}onto {}?",
+          fmt::format("\nWould you like to proceed to write {} raw audio file{}onto {}?",
                       resampled_audios.size(), resampled_audios.empty() ? " " : "s ",
                       mounting.mount_point))) {
     return {};

@@ -26,6 +26,7 @@ int cmain(const Program_arguments prog_args) {
     return 1;
   }
 
+  fmt::print("Done.");
   return 0;
 }
 
