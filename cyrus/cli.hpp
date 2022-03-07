@@ -17,7 +17,6 @@ struct Parsed_arguments {
   std::filesystem::path block_device{};
   std::vector<std::filesystem::path> audio_files{};
   bool help{false};
-  bool append{false};
   int bit_depth{default_bit_depth};
   int word_size{default_word_size};
   int sample_rate{default_sample_rate};

@@ -25,7 +25,6 @@ constexpr const char* const help_message_fmt =
     "\n"
     "Optional Arguments:\n"
     "-h --help\tShow this help message and exit\n"
-    "-a --append\tAppend audio_files to the block device instead of overwriting its contents.\n"
     "\t\tProhibits the use of -b, -w, and -s flags, for these values are already stored on disk.\n"
     "-b --bit_depth <int>\tNumber of bits to store written samples [Default {}]\n"
     "-w --word_size <int>\tNumber of bytes per written word [Default {}]\n"
@@ -34,10 +33,6 @@ constexpr const char* const help_message_fmt =
 
 [[nodiscard]] bool is_help_flag(const Program_argument arg) noexcept {
   return arg == "-h" || arg == "--help";
-}
-
-[[nodiscard]] bool is_append_flag(const Program_argument arg) noexcept {
-  return arg == "-a" || arg == "--append";
 }
 
 [[nodiscard]] bool is_bit_depth_flag(const Program_argument arg) noexcept {
@@ -93,8 +88,6 @@ struct Parse_context {
     if (is_help_flag(*prog_arg_it)) {
       parsed_opts.help = true;
       break;
-    } else if (is_append_flag(*prog_arg_it)) {
-      parsed_opts.append = true;
     } else if (is_bit_depth_flag(*prog_arg_it)) {
       TRY(parsed_opts.bit_depth, next_arg_to_int({prog_arg_it, last}, "bit_depth"))
       ++prog_arg_it;
@@ -116,23 +109,6 @@ struct Parse_context {
 
 [[nodiscard]] tl::expected<Parse_context, std::string> verify_options(
     const Parse_context& ctx) {
-  // check if multiple mutually exclusive options were provided
-  if (const auto& parsed_args = ctx.parsed_args; parsed_args.append) {
-    const char* prohibited_flag = nullptr;
-    if (parsed_args.bit_depth) {
-      prohibited_flag = "bit_depth";
-    } else if (parsed_args.word_size) {
-      prohibited_flag = "word_size";
-    }
-
-    if (prohibited_flag) {
-      return tl::make_unexpected(fmt::format(
-          "Cannot accept both the append flag and the {} flag, as the {} would "
-          "have already been written to the block device.",
-          prohibited_flag, prohibited_flag));
-    }
-  }
-
   // check that word size can store sample size
   static const constexpr auto bits_per_byte = 8;
   if (const auto word_size_bits = ctx.parsed_args.word_size * bits_per_byte;
