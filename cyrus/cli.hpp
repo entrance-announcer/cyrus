@@ -28,7 +28,8 @@ std::string help_message();
 [[nodiscard]] tl::expected<Parsed_arguments, std::string> parse_arguments(
     Program_arguments prog_args);
 
-[[nodiscard]] bool user_accept_dialog(std::string_view, std::string_view,
-                                      std::string_view);
+[[nodiscard]] bool user_accept_dialog(std::string_view,
+                                      std::string_view accept_option = "y",
+                                      std::string_view decline_option = "n");
 
 }  // namespace cyrus

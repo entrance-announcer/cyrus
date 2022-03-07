@@ -1,10 +1,14 @@
 #pragma once
 
 #include <fmt/core.h>
+#include <samplerate.h>
 
+#include <cmath>
+#include <concepts>
 #include <filesystem>
 #include <numeric>  // midpoint
 #include <sndfile.hh>
+#include <tl/expected.hpp>
 #include <vector>
 
 namespace cyrus {
@@ -52,20 +56,20 @@ class Audio_signal {
  private:
   constexpr static auto mono_chans = 1;
   constexpr static auto stereo_chans = 2;
-  SndfileHandle sndfile_handle{};
-  std::vector<T, Alloc> signal{};
+  int _sample_rate{0};
+  std::vector<T, Alloc> _signal{};
 
   void resize_signal_sf(const sf_count_t new_size) {
-    this->signal.resize(static_cast<size_type>(new_size));
+    _signal.resize(static_cast<size_type>(new_size));
   }
 
  public:
   using value_type = T;
   using allocator_type = Alloc;
-  using size_type = typename decltype(signal)::size_type;
-  using difference_type = typename decltype(signal)::difference_type;
-  using iterator = typename decltype(signal)::iterator;
-  using const_iterator = typename decltype(signal)::const_iterator;
+  using size_type = typename decltype(_signal)::size_type;
+  using difference_type = typename decltype(_signal)::difference_type;
+  using iterator = typename decltype(_signal)::iterator;
+  using const_iterator = typename decltype(_signal)::const_iterator;
 
   explicit Audio_signal() = default;
   Audio_signal(const Audio_signal&) = default;
@@ -75,7 +79,7 @@ class Audio_signal {
   // Nevertheless, it implements reference semantics on copy. So, although
   // this is not semantically ideal, and a move constructor should be what
   // implements reference semantics, copying will not be heavy. Additionally,
-  // the signal, which is where most of the data is, can be moved.
+  // the _signal, which is where most of the data is, can be moved.
   Audio_signal(Audio_signal&&) noexcept = default;
   Audio_signal& operator=(Audio_signal&&) noexcept = default;
 
@@ -83,31 +87,30 @@ class Audio_signal {
     auto result = Audio_error_code::no_error;
 
     // open audio file
-    this->sndfile_handle = SndfileHandle(audio_file.c_str());
+    SndfileHandle sndfile_handle(audio_file.c_str());
     if (const auto errc = static_cast<Audio_error_code>(sndfile_handle.error());
         errc != Audio_error_code::no_error) {
       return errc;
-    } else if (this->sndfile_handle.channels() < mono_chans ||
-               this->sndfile_handle.channels() > stereo_chans) {
+    } else if (sndfile_handle.channels() < mono_chans ||
+               sndfile_handle.channels() > stereo_chans) {
       return Audio_error_code::unsupported_number_of_channels;
     }
 
     // decode and load contents
-    const auto num_channels = this->sndfile_handle.channels();
-    const auto num_frames = this->sndfile_handle.frames();
-    const sf_count_t num_items = num_frames * num_channels;
+    _sample_rate = sndfile_handle.samplerate();
+    const sf_count_t num_items = sndfile_handle.channels() * sndfile_handle.frames();
     this->resize_signal_sf(num_items);
-    if (const auto num_read = this->sndfile_handle.read(this->signal.data(), num_items);
+    if (const auto num_read = sndfile_handle.read(_signal.data(), num_items);
         num_read < num_items) {
       result = Audio_error_code::hit_eof;
       this->resize_signal_sf(num_read);
     }
 
     // convert any stereo data to mono by averaging channels
-    if (this->sndfile_handle.channels() == stereo_chans) {
-      auto read_it = this->signal.cbegin();
-      auto write_it = this->signal.begin();
-      while (read_it < this->signal.end()) {
+    if (sndfile_handle.channels() == stereo_chans) {
+      auto read_it = _signal.cbegin();
+      auto write_it = _signal.begin();
+      while (read_it < _signal.end()) {
         const auto left_sample = *read_it;
         const auto right_sample = *(read_it + 1);
         *write_it = std::midpoint(left_sample, right_sample);
@@ -115,25 +118,60 @@ class Audio_signal {
         write_it += mono_chans;
       }
     }
-    this->resize_signal_sf(num_frames);
+    this->resize_signal_sf(sndfile_handle.frames());
 
     return result;
   }
 
-  [[nodiscard]] int format() const { return this->sndfile_handle.format(); }
+  tl::expected<Audio_signal, Audio_error_code> resample(const int sample_rate) const {
+    static_assert(std::same_as<T, float>,
+                  "To resample audio signals, both the input "
+                  "and output samples must be stored as floats.");
 
-  [[nodiscard]] int sample_rate() const { return this->sndfile_handle.samplerate(); }
+    if (_sample_rate == sample_rate) {
+      return *this;
+    }
 
-  [[nodiscard]] iterator begin() noexcept { return this->signal.begin(); }
+    Audio_signal resampled_signal;
+    resampled_signal._sample_rate = sample_rate;
+    const auto resample_ratio{static_cast<double>(sample_rate) / _sample_rate};
+    const auto resampled_size{static_cast<sf_count_t>(
+        std::ceil(resample_ratio * static_cast<double>(_signal.size())))};
+    resampled_signal.resize_signal_sf(resampled_size);
 
-  [[nodiscard]] iterator end() noexcept { return this->signal.end(); }
+    SRC_DATA conversion_data;
+    conversion_data.data_in = _signal.data();
+    conversion_data.data_out = resampled_signal._signal.data();
+    conversion_data.input_frames = static_cast<long>(_signal.size());
+    conversion_data.output_frames = resampled_size;
+    conversion_data.src_ratio = resample_ratio;
 
-  [[nodiscard]] const_iterator cbegin() const noexcept { return this->signal.cbegin(); }
+    const auto src_errc = src_simple(&conversion_data, SRC_SINC_BEST_QUALITY, 1);
+    if (const auto errc = static_cast<Audio_error_code>(src_errc);
+        errc != Audio_error_code::no_error) {
+      return tl::make_unexpected(errc);
+    }
 
-  [[nodiscard]] const_iterator cend() const noexcept { return this->signal.cend(); }
+    resampled_signal.resize_signal_sf(conversion_data.output_frames_gen);
+    return resampled_signal;
+  }
+
+  [[nodiscard]] int sample_rate() const noexcept { return _sample_rate; }
+
+  [[nodiscard]] iterator begin() noexcept { return _signal.begin(); }
+
+  [[nodiscard]] iterator end() noexcept { return _signal.end(); }
+
+  [[nodiscard]] const_iterator cbegin() const noexcept { return _signal.cbegin(); }
+
+  [[nodiscard]] const_iterator cend() const noexcept { return _signal.cend(); }
 
   // number of samples
-  [[nodiscard]] size_type size() const noexcept { return this->signal.size(); }
+  [[nodiscard]] size_type size() const noexcept { return _signal.size(); }
+
+  [[nodiscard]] const char* data() const noexcept {
+    return std::bit_cast<const char*>(_signal.data());
+  }
 
   // total number of bytes to store size() samples
   [[nodiscard]] size_type data_size() const noexcept {

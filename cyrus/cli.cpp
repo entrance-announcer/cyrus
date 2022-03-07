@@ -29,7 +29,7 @@ constexpr const char* const help_message_fmt =
     "\t\tProhibits the use of -b, -w, and -s flags, for these values are already stored on disk.\n"
     "-b --bit_depth <int>\tNumber of bits to store written samples [Default {}]\n"
     "-w --word_size <int>\tNumber of bytes per written word [Default {}]\n"
-    "-s --sample_rate <int>\tSamples/second to write audio [Default {}]\n";
+    "-s --_sample_rate <int>\tSamples/second to write audio [Default {}]\n";
 // clang-format on
 
 [[nodiscard]] bool is_help_flag(const Program_argument arg) noexcept {
@@ -49,7 +49,7 @@ constexpr const char* const help_message_fmt =
 }
 
 [[nodiscard]] bool is_sample_rate_flag(const Program_argument arg) noexcept {
-  return arg.starts_with("-s") || arg.starts_with("--sample_rate");
+  return arg.starts_with("-s") || arg.starts_with("--_sample_rate");
 }
 
 [[nodiscard]] tl::expected<int, std::string> next_arg_to_int(
@@ -102,7 +102,7 @@ struct Parse_context {
       TRY(parsed_opts.word_size, next_arg_to_int({prog_arg_it, last}, "word_size"))
       ++prog_arg_it;
     } else if (is_sample_rate_flag(*prog_arg_it)) {
-      TRY(parsed_opts.sample_rate, next_arg_to_int({prog_arg_it, last}, "sample_rate"))
+      TRY(parsed_opts.sample_rate, next_arg_to_int({prog_arg_it, last}, "_sample_rate"))
       ++prog_arg_it;
     } else {
       return tl::make_unexpected(
@@ -199,9 +199,8 @@ tl::expected<Parsed_arguments, std::string> parse_arguments(
       .map([](const auto c) { return c.parsed_args; });
 }
 
-bool user_accept_dialog(const std::string_view message,
-                        std::string_view accept_option = "y",
-                        std::string_view decline_option = "n") {
+bool user_accept_dialog(const std::string_view message, std::string_view accept_option,
+                        std::string_view decline_option) {
   static const constexpr char* const trim_chars = " \t\n\r";
   std::string user_input;
   while (true) {

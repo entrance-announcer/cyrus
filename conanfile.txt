@@ -1,5 +1,6 @@
 [requires]
 libsndfile/1.0.31
+libsamplerate/0.2.2
 fmt/8.1.1
 tl-expected/20190710
 

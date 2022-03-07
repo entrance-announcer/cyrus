@@ -5,6 +5,7 @@
 #include <cyrus/audio_signal.hpp>
 #include <cyrus/cli.hpp>
 #include <cyrus/device_probing.hpp>
+#include <cyrus/sample_conversions.hpp>
 #include <cyrus/write_audio.hpp>
 #include <filesystem>
 #include <fstream>
@@ -31,7 +32,7 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
 
   for (const auto& audio_file_path : audio_file_paths) {
     if (!fs::exists(audio_file_path)) {
-      tl::make_unexpected(
+      return tl::make_unexpected(
           fmt::format("The audio file {} doesn't exist.", audio_file_path));
     }
 
@@ -44,7 +45,6 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
                                              audio_file_path, audio_error_message(errc)));
     }
 
-    fmt::print("audio size: {}\n", audio_signal.size());
     audio_signals.emplace_back(audio_file_path, std::move(audio_signal));
   }
 
@@ -70,7 +70,7 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
   if (drive_partitions.empty()) {
     return tl::make_unexpected(
         "The specified block device is part of a drive without partitions. Miley reads "
-        "from partition 1 of its device.");
+        "from partition 1 of its storage device.");
   }
   if (block_device != drive_partitions[0]) {
     return tl::make_unexpected(
@@ -110,8 +110,7 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
 }  // namespace
 
 tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& args) {
-  if (const auto dev_valid = block_device_validity_checks(args.block_device);
-      !dev_valid) {
+  if (auto dev_valid = block_device_validity_checks(args.block_device); !dev_valid) {
     return dev_valid;
   }
 
@@ -139,34 +138,55 @@ tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& ar
   const auto& loaded_audios = loaded.value();
   fmt::print("Loaded all audio files.\n");
 
-  // length * sample_rate * sample_size * num_audio_files
-  double total_length_sec = 0;
-
-  // TODO: get a more accurate measurement, including any headers and
-  //  filesystem meta
-  auto total_write_size =
-      static_cast<std::size_t>(total_length_sec * args.sample_rate * args.word_size *
-                               static_cast<float>(loaded_audios.size()));
-
-  if (const auto dev_size = 1E7; dev_size < total_write_size * 2) {
-    return tl::make_unexpected(
-        "Cannot write the audio files to the provided block "
-        "device, as it isn't large enough.");
+  // resample audio
+  std::vector<Audio_signal_t> resampled_audios;
+  resampled_audios.reserve(loaded_audios.size());
+  for (const auto& [in_audio_path, loaded_audio] : loaded_audios) {
+    auto&& resampled = loaded_audio.resample(args.sample_rate);
+    if (!resampled) {
+      return tl::make_unexpected(fmt::format("Failed to resample {}: {}.", in_audio_path,
+                                             audio_error_message(resampled.error())));
+    }
+    resampled_audios.push_back(resampled.value());
   }
 
-  // open output files
+  // ensure that specified device has sufficient available space
+  const auto write_samples = std::accumulate(
+      resampled_audios.cbegin(), resampled_audios.cend(), 0u,
+      [](const auto& acc, const auto& curr) { return acc + curr.size(); });
 
-  for (const auto& [in_audio_path, loaded_audio] : loaded_audios) {
-    const auto open_mode = std::ios_base::out | std::ios_base::binary;
-    const auto out_path = mounting.mount_point / in_audio_path.stem();
+  if (const auto available_space = fs::space(mounting.mount_point).available;
+      available_space < write_samples * static_cast<std::size_t>(args.word_size)) {
+    return tl::make_unexpected(
+        "The provided block device lacks the available space to "
+        "store the specified audio files");
+  }
+
+  // prompt user before writing
+  if (!user_accept_dialog(
+          fmt::format("Would you like to proceed to write {} raw audio file{}onto {}?",
+                      resampled_audios.size(), resampled_audios.empty() ? " " : "s ",
+                      mounting.mount_point))) {
+    return {};
+  }
+
+  // write resampled audio to block device
+  for (std::size_t audio_idx = 0; audio_idx < resampled_audios.size(); ++audio_idx) {
+    const auto& in_audio_path = loaded_audios[audio_idx].first;
+    const auto& resampled = resampled_audios[audio_idx];
+    const auto out_path =
+        mounting.mount_point / in_audio_path.filename().replace_extension("raw");
+    const auto open_mode =
+        std::ios_base::out | std::ios_base::binary | std::ios_base::trunc;
+
     std::ofstream out_file(out_path.string(), open_mode);
     if (!out_file.good()) {
       return tl::make_unexpected(
           fmt::format("Couldn't open the destination file: {}.", out_path));
     }
-    // transform loaded audio to file format we want, maybe with resampling
-    out_file << "testing";
-    out_file.flush();
+
+    // TODO: convert resampled audio's samples to appropriate raw format
+    out_file.write(resampled.data(), static_cast<std::streamsize>(resampled.data_size()));
   }
 
   return {};

@@ -32,6 +32,7 @@ set(CYRUS_DEFAULT_COMPILE_OPTIONS
 
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_BINARY_DIR}")
 find_package(SndFile REQUIRED CONFIG)
+find_package(SampleRate REQUIRED CONFIG)
 find_package(fmt REQUIRED CONFIG)
 find_package(tl-expected REQUIRED CONFIG)
 

@@ -82,6 +82,10 @@ std::vector<fs::path> read_drive_partitions(const std::filesystem::path& block_d
     std::getline(partitions, partition_line);
   }
 
+  const auto in_same_drive = [](const std::string_view blk, const std::string_view part) {
+    return blk.starts_with(part) || part.starts_with(blk);
+  };
+
   while (std::getline(partitions, partition_line)) {
     // form block device path from listed partition name
     const auto partition_name_start = partition_line.find_last_of(delim) + 1;
@@ -94,9 +98,7 @@ std::vector<fs::path> read_drive_partitions(const std::filesystem::path& block_d
     device_partition = "/dev" / device_partition;
 
     // check if device partition belongs to provided block device
-    if (const auto in_same_drive =
-            block_device.string().starts_with(device_partition.string());
-        !in_same_drive) {
+    if (!in_same_drive(block_device.string(), device_partition.string())) {
       if (drive_partitions.empty()) {
         // haven't reached pertinent drive yet
         continue;
