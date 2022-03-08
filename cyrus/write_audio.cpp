@@ -214,6 +214,7 @@ tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& ar
 
     out_file.write(std::bit_cast<char*>(converted.data()),
                    static_cast<std::streamsize>(converted.size()));
+    fmt::print("\t✔ wrote {}\n", in_audio_path);
   }
 
   return {};
