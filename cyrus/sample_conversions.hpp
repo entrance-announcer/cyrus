@@ -16,56 +16,47 @@ template <typename T>
 concept Sample = (std::integral<T> || std::floating_point<T>);
 
 template <typename SampleFrom, typename SampleTo>
-concept ConvertibleSample = Sample<SampleTo> && Sample<SampleFrom> &&
-    std::convertible_to<SampleFrom, SampleTo>;
+concept ConvertibleSample =
+    Sample<SampleTo> && Sample<SampleFrom> && std::convertible_to<SampleFrom, SampleTo>;
 
-template <Sample SampleTo, ConvertibleSample<SampleTo> SampleFrom>
-requires std::convertible_to<SampleFrom, Ratio_t> SampleTo
-convert_sample_type(const SampleFrom from) {
-  if constexpr (std::is_same_v<SampleFrom, SampleTo>) {
-    return from;
-  }
 
-  const Ratio_t from_val = from;
-  const auto from_type_max{std::numeric_limits<SampleFrom>::max()};
-  const Ratio_t from_ratio{from_val / from_type_max};
-
-  return from_ratio * from_val;
-}
+static constexpr float norm_float_min{-1.0f};
+static constexpr float norm_float_max{+1.0f};
 
 template <Sample SampleTo, ConvertibleSample<SampleTo> SampleFrom>
 requires std::convertible_to<SampleFrom, Ratio_t>
 class Sample_remapper {
  private:
   Ratio_t scale{1.0};
-  SampleTo shift{0};
+  Ratio_t shift{0};
 
  public:
   struct Remap_values {
-    SampleFrom from_min{0};
-    SampleFrom from_max{0};
+    SampleFrom from_min{norm_float_min};
+    SampleFrom from_max{norm_float_max};
     SampleTo to_min{0};
-    SampleTo to_max{0};
+    SampleTo to_max{std::numeric_limits<SampleTo>::max()};
   };
 
   explicit Sample_remapper(
       const Remap_values &vals,
       const std::source_location loc = std::source_location::current()) {
-    const auto from_range = vals.from_max - vals.from_min;
+    const auto from_range = static_cast<Ratio_t>(vals.from_max - vals.from_min);
     if (from_range == 0) {
-      throw std::domain_error(
-          fmt::format("Cannot create a sample remapper for samples "
-                      "without a range of possible values. Range: ({} -> {})\n"
-                      "Location: {} - ({}:{})\n",
-                      vals.from_min, vals.from_max, loc.file_name(), loc.line(),
-                      loc.column()));
+      throw std::domain_error(fmt::format(
+          "Cannot create a sample remapper for samples "
+          "without a range of possible values. Range: ({} -> {})\n"
+          "Location: {} - ({}:{})\n",
+          vals.from_min, vals.from_max, loc.file_name(), loc.line(), loc.column()));
     }
-    this->scale = (vals.to_max - vals.to_min) / from_range;
-    this->shift = vals.to_min - vals.from_min * this->scale;
+    this->scale = static_cast<Ratio_t>(vals.to_max - vals.to_min) / from_range;
+    this->shift =
+        (static_cast<Ratio_t>(vals.to_min) - static_cast<Ratio_t>(vals.from_min)) *
+        this->scale;
   }
 
   inline SampleTo operator()(const SampleFrom from) const noexcept {
-    return static_cast<SampleTo>(this->scale * from) + this->shift;
+    return static_cast<SampleTo>(this->scale * from + this->shift);
   }
 };
 

@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <concepts>
+#include <cyrus/sample_conversions.hpp>
 #include <filesystem>
 #include <numeric>  // midpoint
 #include <sndfile.hh>
@@ -51,7 +52,7 @@ concept Libsndfile_sample = One_of<T, short, int, float, double>;
 
 // represents a single channel audio file, that is loaded from a single
 // (mono) or dual (stereo) channel audio file.
-template <Libsndfile_sample T, typename Alloc = typename std::vector<T>::allocator_type>
+template <Sample T, typename Alloc = typename std::vector<T>::allocator_type>
 class Audio_signal {
  private:
   constexpr static auto mono_chans = 1;
@@ -84,6 +85,8 @@ class Audio_signal {
   Audio_signal& operator=(Audio_signal&&) noexcept = default;
 
   Audio_error_code load(const std::filesystem::path& audio_file) {
+    static_assert(Libsndfile_sample<T>,
+                  "To load audio, sample data must be compatible with libsndfile.");
     auto result = Audio_error_code::no_error;
 
     // open audio file
@@ -123,7 +126,22 @@ class Audio_signal {
     return result;
   }
 
-  tl::expected<Audio_signal, Audio_error_code> resample(const int sample_rate) const {
+
+  template <Sample U>
+  Audio_signal<U> remapped(
+      const typename Sample_remapper<U, T>::Remap_values& remap_vals = {}) const {
+    const Sample_remapper<U, T> remapper(remap_vals);
+    Audio_signal<U> remapped;
+    remapped.resize(_signal.size());
+
+    for (size_type i = 0; i < _signal.size(); ++i) {
+      remapped[i] = remapper(_signal[i]);
+    }
+    return remapped;
+  }
+
+
+  tl::expected<Audio_signal, Audio_error_code> resampled(const int sample_rate) const {
     static_assert(std::same_as<T, float>,
                   "To resample audio signals, both the input "
                   "and output samples must be stored as floats.");
@@ -156,7 +174,17 @@ class Audio_signal {
     return resampled_signal;
   }
 
+  void resize(const size_type size) { _signal.resize(size); }
+
   [[nodiscard]] int sample_rate() const noexcept { return _sample_rate; }
+
+  [[nodiscard]] value_type& operator[](const size_type idx) noexcept {
+    return _signal[idx];
+  }
+
+  [[nodiscard]] const value_type& operator[](const size_type idx) const noexcept {
+    return _signal[idx];
+  }
 
   [[nodiscard]] iterator begin() noexcept { return _signal.begin(); }
 
@@ -171,11 +199,6 @@ class Audio_signal {
 
   [[nodiscard]] const char* data() const noexcept {
     return std::bit_cast<const char*>(_signal.data());
-  }
-
-  // total number of bytes to store size() samples
-  [[nodiscard]] size_type data_size() const noexcept {
-    return this->size() * sizeof(value_type);
   }
 };
 

@@ -109,6 +109,7 @@ struct Parse_context {
 
 [[nodiscard]] tl::expected<Parse_context, std::string> verify_options(
     const Parse_context& ctx) {
+  // check that word size is multiple
   // check that word size can store sample size
   static const constexpr auto bits_per_byte = 8;
   if (const auto word_size_bits = ctx.parsed_args.word_size * bits_per_byte;

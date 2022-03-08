@@ -5,7 +5,6 @@
 #include <cyrus/audio_signal.hpp>
 #include <cyrus/cli.hpp>
 #include <cyrus/device_probing.hpp>
-#include <cyrus/sample_conversions.hpp>
 #include <cyrus/try.hpp>
 #include <cyrus/write_audio.hpp>
 #include <filesystem>
@@ -85,11 +84,9 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
 [[nodiscard]] tl::expected<Mounting, std::string> get_destination_mounting(
     const fs::path& block_device) {
   // get mount points of the provided device and any of its partitions
-  const auto mountings_e = read_mounting(block_device);
-  if (!mountings_e) {
-    return tl::make_unexpected(mountings_e.error().message());
-  }
-  const auto& mountings = mountings_e.value();
+  const auto mountings = TRY(read_mounting(block_device).map_error([](const auto& err) {
+    return err.message();
+  }));
 
   // ensure device is mounted
   if (mountings.empty()) {
@@ -109,22 +106,32 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
   return mount_it->second;
 }
 
-[[nodiscard]] tl::expected<std::vector<Audio_signal_t>, std::string> resample_audio(
-    const Parsed_arguments& args,
-    const std::vector<std::pair<fs::path, Audio_signal_t>>& loaded_audios) {
-  std::vector<Audio_signal_t> resampled_audios;
-  resampled_audios.reserve(loaded_audios.size());
+template <Sample T>
+[[nodiscard]] tl::expected<std::vector<std::vector<std::byte>>, std::string>
+convert_audio(const Parsed_arguments& args,
+              const std::vector<std::pair<fs::path, Audio_signal_t>>& loaded_audios) {
+  std::vector<std::vector<std::byte>> converted;
+  converted.reserve(loaded_audios.size());
+
+  Audio_signal_t resampled;
+  Audio_signal<T> remapped;
   for (const auto& [in_audio_path, loaded_audio] : loaded_audios) {
-    auto&& resampled = loaded_audio.resample(args.sample_rate);
-    if (!resampled) {
-      return tl::make_unexpected(fmt::format("Failed to resample {}: {}.", in_audio_path,
-                                             audio_error_message(resampled.error())));
-    }
-    resampled_audios.push_back(resampled.value());
-    fmt::print("\t✔ resampled {}\n", in_audio_path);
+    resampled =
+        TRY(loaded_audio.resampled(args.sample_rate).map_error([&](const auto& err) {
+          return fmt::format("Failed to resample {}: {}.", in_audio_path,
+                             audio_error_message(err));
+        }));
+    fmt::print("\t✔ resampled {}", in_audio_path);
+
+    const auto to_max = static_cast<T>((1 << args.bit_depth) - 1);
+    remapped = resampled.remapped<T>({.to_max = to_max});
+    fmt::print("\r\t✔ resampled  ✔ remapped {}\n", in_audio_path);
+
+    auto* start = std::bit_cast<std::byte*>(remapped.data());
+    converted.emplace_back(start, start + remapped.size() * sizeof(T));
   }
 
-  return resampled_audios;
+  return converted;
 }
 
 }  // namespace
@@ -149,35 +156,51 @@ tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& ar
   fmt::print("Loading audio files... \n");
   const auto loaded_audios = TRY(load_audio_files(args.audio_files));
 
-  // resample audio
-  fmt::print("Resampling audio to {} samples/s... \n", args.sample_rate);
-  const auto resampled_audios = TRY(resample_audio(args, loaded_audios));
-
+  // resample & remap audio
+  fmt::print("Converting audio signals... \n");
+  std::vector<std::vector<std::byte>> converted_audios;
+  switch (args.word_size) {
+    case 1:
+      converted_audios = TRY(convert_audio<std::uint8_t>(args, loaded_audios));
+      break;
+    case 2:
+      converted_audios = TRY(convert_audio<std::uint16_t>(args, loaded_audios));
+      break;
+    case 4:
+      converted_audios = TRY(convert_audio<std::uint32_t>(args, loaded_audios));
+      break;
+    case 8:
+      converted_audios = TRY(convert_audio<std::uint64_t>(args, loaded_audios));
+      break;
+    default:
+      return tl::make_unexpected(fmt::format(
+          "Cannot convert audio samples to a word size of {}", args.word_size));
+  }
 
   // ensure that specified device has sufficient available space
-  const auto write_samples = std::accumulate(
-      resampled_audios.cbegin(), resampled_audios.cend(), 0u,
+  const auto write_size = std::accumulate(
+      converted_audios.cbegin(), converted_audios.cend(), 0u,
       [](const auto& acc, const auto& curr) { return acc + curr.size(); });
 
   if (const auto available_space = fs::space(mounting.mount_point).available;
-      available_space < write_samples * static_cast<std::size_t>(args.word_size)) {
+      available_space < write_size) {
     return tl::make_unexpected(
-        "The provided block device lacks the available space to "
-        "store the specified audio files");
+        "The provided block device lacks the available space to store the specified "
+        "audio files");
   }
 
   // prompt user before writing
   if (!user_accept_dialog(
           fmt::format("\nWould you like to proceed to write {} raw audio file{}onto {}?",
-                      resampled_audios.size(), resampled_audios.empty() ? " " : "s ",
+                      converted_audios.size(), converted_audios.size() == 1 ? " " : "s ",
                       mounting.mount_point))) {
     return {};
   }
 
-  // write resampled audio to block device
-  for (std::size_t audio_idx = 0; audio_idx < resampled_audios.size(); ++audio_idx) {
+  // write converted audio to block device
+  for (std::size_t audio_idx = 0; audio_idx < converted_audios.size(); ++audio_idx) {
     const auto& in_audio_path = loaded_audios[audio_idx].first;
-    const auto& resampled = resampled_audios[audio_idx];
+    const auto& converted = converted_audios[audio_idx];
     const auto out_path =
         mounting.mount_point / in_audio_path.filename().replace_extension("raw");
     const auto open_mode =
@@ -189,8 +212,8 @@ tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& ar
           fmt::format("Couldn't open the destination file: {}.", out_path));
     }
 
-    // TODO: convert resampled audio's samples to appropriate raw format
-    out_file.write(resampled.data(), static_cast<std::streamsize>(resampled.data_size()));
+    out_file.write(std::bit_cast<char*>(converted.data()),
+                   static_cast<std::streamsize>(converted.size()));
   }
 
   return {};
