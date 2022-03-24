@@ -6,10 +6,21 @@
 #include <iostream>
 #include <string>
 #include <tl/expected.hpp>
+#include <utility>
 
 namespace cyrus {
 
 namespace {
+
+struct Flags_t {
+  const char* const short_flag{nullptr};
+  const char* const long_flag{nullptr};
+};
+constexpr Flags_t help_flags{"-h", "--help"};
+constexpr Flags_t bit_depth_flags{"-b", "--bit_depth"};
+constexpr Flags_t word_size_flags{"-w", "--word_size"};
+constexpr Flags_t sample_rate_flags{"-s", "--sample_rate"};
+constexpr Flags_t maximize_flags{"-m", "--maximize"};
 
 // clang-format off
 constexpr const char* const help_message_fmt =
@@ -24,27 +35,15 @@ constexpr const char* const help_message_fmt =
     "audio_files\tInput wav and aiff formatted audio files\n"
     "\n"
     "Optional Arguments:\n"
-    "-h --help\tShow this help message and exit\n"
-    "\t\tProhibits the use of -b, -w, and -s flags, for these values are already stored on disk.\n"
-    "-b --bit_depth <int>\tNumber of bits to store written samples [Default {}]\n"
-    "-w --word_size <int>\tNumber of bytes per written word [Default {}]\n"
-    "-s --_sample_rate <int>\tSamples/second to write audio [Default {}]\n";
+    "{help} {help_long}\tShow this help message and exit\n"
+    "{bit} {bit_long} <int>\tNumber of bits used to store written samples [Default {bit_default}]\n"
+    "{word} {word_long} <int>\tNumber of bytes per written word [Default {word_default}]\n"
+    "{rate} {rate_long} <int>\tSamples/second of written audio [Default {rate_default}]\n"
+    "{max} {max_long}\tScale the input waveform to occupy the entire bit_depth\n";
 // clang-format on
 
-[[nodiscard]] bool is_help_flag(const Program_argument arg) noexcept {
-  return arg == "-h" || arg == "--help";
-}
-
-[[nodiscard]] bool is_bit_depth_flag(const Program_argument arg) noexcept {
-  return arg.starts_with("-b") || arg.starts_with("--bit_depth");
-}
-
-[[nodiscard]] bool is_word_size_flag(const Program_argument arg) noexcept {
-  return arg.starts_with("-w") || arg.starts_with("--word_size");
-}
-
-[[nodiscard]] bool is_sample_rate_flag(const Program_argument arg) noexcept {
-  return arg.starts_with("-s") || arg.starts_with("--_sample_rate");
+[[nodiscard]] bool is_flag(const Flags_t flags, const Program_argument arg) noexcept {
+  return arg == flags.short_flag || arg == flags.long_flag;
 }
 
 [[nodiscard]] tl::expected<int, std::string> next_arg_to_int(
@@ -85,24 +84,25 @@ struct Parse_context {
   const auto last = ctx.prog_args.end();
   for (; prog_arg_it < ctx.prog_args.end() && prog_arg_it->front() == '-';
        ++prog_arg_it) {
-    if (is_help_flag(*prog_arg_it)) {
+    if (is_flag(help_flags, *prog_arg_it)) {
       parsed_opts.help = true;
       break;
-    } else if (is_bit_depth_flag(*prog_arg_it)) {
+    } else if (is_flag(bit_depth_flags, *prog_arg_it)) {
       parsed_opts.bit_depth = TRY(next_arg_to_int({prog_arg_it, last}, "bit_depth"));
       ++prog_arg_it;
-    } else if (is_word_size_flag(*prog_arg_it)) {
+    } else if (is_flag(word_size_flags, *prog_arg_it)) {
       parsed_opts.word_size = TRY(next_arg_to_int({prog_arg_it, last}, "word_size"));
       ++prog_arg_it;
-    } else if (is_sample_rate_flag(*prog_arg_it)) {
-      parsed_opts.sample_rate = TRY(next_arg_to_int({prog_arg_it, last}, "_sample_rate"));
+    } else if (is_flag(sample_rate_flags, *prog_arg_it)) {
+      parsed_opts.sample_rate = TRY(next_arg_to_int({prog_arg_it, last}, "sample_rate"));
       ++prog_arg_it;
+    } else if (is_flag(maximize_flags, *prog_arg_it)) {
+      parsed_opts.maximize = true;
     } else {
       return tl::make_unexpected(
           fmt::format("Unrecognized optional argument provided: {}", *prog_arg_it));
     }
   }
-
   return Parse_context{.prog_args = {prog_arg_it, last}, .parsed_args = parsed_opts};
 }
 
@@ -157,8 +157,15 @@ struct Parse_context {
 }  // namespace
 
 std::string help_message() {
-  return fmt::format(help_message_fmt, default_bit_depth, default_word_size,
-                     default_sample_rate);
+  using namespace fmt::literals;
+  return fmt::format(
+      help_message_fmt, "help"_a = help_flags.short_flag,
+      "help_long"_a = help_flags.long_flag, "bit"_a = bit_depth_flags.short_flag,
+      "bit_long"_a = bit_depth_flags.long_flag, "bit_default"_a = default_bit_depth,
+      "word"_a = word_size_flags.short_flag, "word_long"_a = word_size_flags.long_flag,
+      "word_default"_a = default_word_size, "rate"_a = sample_rate_flags.short_flag,
+      "rate_long"_a = sample_rate_flags.long_flag, "rate_default"_a = default_sample_rate,
+      "max"_a = maximize_flags.short_flag, "max_long"_a = maximize_flags.long_flag);
 }
 
 tl::expected<Parsed_arguments, std::string> parse_arguments(

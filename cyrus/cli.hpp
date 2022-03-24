@@ -11,7 +11,7 @@ namespace cyrus {
 
 constexpr const int default_bit_depth{12};
 constexpr const int default_word_size{2};
-constexpr const int default_sample_rate{44100};
+constexpr const int default_sample_rate{44000};
 
 struct Parsed_arguments {
   std::filesystem::path block_device{};
@@ -20,6 +20,7 @@ struct Parsed_arguments {
   int bit_depth{default_bit_depth};
   int word_size{default_word_size};
   int sample_rate{default_sample_rate};
+  bool maximize{false};
 };
 
 std::string help_message();
