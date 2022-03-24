@@ -2,9 +2,11 @@
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
 
+#include <algorithm>
 #include <cyrus/audio_signal.hpp>
 #include <cyrus/cli.hpp>
 #include <cyrus/device_probing.hpp>
+#include <cyrus/sample_conversions.hpp>
 #include <cyrus/try.hpp>
 #include <cyrus/write_audio.hpp>
 #include <filesystem>
@@ -16,7 +18,8 @@
 #include <vector>
 
 namespace fs = std::filesystem;
-namespace vws = std::ranges::views;
+namespace rgs = std::ranges;
+namespace vws = rgs::views;
 
 namespace cyrus {
 
@@ -106,16 +109,25 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
   return mount_it->second;
 }
 
+
 template <Sample T>
 [[nodiscard]] tl::expected<std::vector<std::vector<std::byte>>, std::string>
 convert_audio(const Parsed_arguments& args,
               const std::vector<std::pair<fs::path, Audio_signal_t>>& loaded_audios) {
   std::vector<std::vector<std::byte>> converted;
   converted.reserve(loaded_audios.size());
+  using Remap_t = typename Sample_remapper<T, Audio_signal_t::value_type>::Remap_values;
+  Remap_t remap_values{.to_max = static_cast<T>((1 << args.bit_depth) - 1)};
 
   Audio_signal_t resampled;
   Audio_signal<T> remapped;
   for (const auto& [in_audio_path, loaded_audio] : loaded_audios) {
+    if (args.maximize) {
+      const auto [audio_min, audio_max] = rgs::minmax(loaded_audio);
+      remap_values.from_min = audio_min;
+      remap_values.from_max = audio_max;
+    }
+
     resampled =
         TRY(loaded_audio.resampled(args.sample_rate).map_error([&](const auto& err) {
           return fmt::format("Failed to resample {}: {}.", in_audio_path,
@@ -123,8 +135,7 @@ convert_audio(const Parsed_arguments& args,
         }));
     fmt::print("\t✔ resampled {}", in_audio_path);
 
-    const auto to_max = static_cast<T>((1 << args.bit_depth) - 1);
-    remapped = resampled.remapped<T>({.to_max = to_max});
+    remapped = resampled.remapped<T>(remap_values);
     fmt::print("\r\t✔ resampled  ✔ remapped {}\n", in_audio_path);
 
     auto* start = std::bit_cast<std::byte*>(remapped.data());

@@ -39,7 +39,7 @@ constexpr const char* const help_message_fmt =
     "{bit} {bit_long} <int>\tNumber of bits used to store written samples [Default {bit_default}]\n"
     "{word} {word_long} <int>\tNumber of bytes per written word [Default {word_default}]\n"
     "{rate} {rate_long} <int>\tSamples/second of written audio [Default {rate_default}]\n"
-    "{max} {max_long}\tScale the input waveform to occupy the entire bit_depth\n";
+    "{max} {max_long}\t\tScale the input waveform to occupy the entire bit_depth\n";
 // clang-format on
 
 [[nodiscard]] bool is_flag(const Flags_t flags, const Program_argument arg) noexcept {

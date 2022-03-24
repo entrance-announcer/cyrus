@@ -190,6 +190,10 @@ class Audio_signal {
 
   [[nodiscard]] iterator end() noexcept { return _signal.end(); }
 
+  [[nodiscard]] const_iterator begin() const noexcept { return _signal.begin(); }
+
+  [[nodiscard]] const_iterator end() const noexcept { return _signal.end(); }
+
   [[nodiscard]] const_iterator cbegin() const noexcept { return _signal.cbegin(); }
 
   [[nodiscard]] const_iterator cend() const noexcept { return _signal.cend(); }
