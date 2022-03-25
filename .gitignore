@@ -1,5 +1,32 @@
-.idea/
-.cache/
-build/
-cmake-build*/
+# C++
+build*/
+cmake-build-*/
 compile_commands.json
+.[Cc]ache/
+
+# Python
+venv/
+.venv/
+pyenv/
+.pyenv/
+__pycache__/
+*.py[cod]
+
+# Editors
+.idea/
+.vscode/
+.vs/
+.settings/
+
+# MPLAB X
+build/
+debug/
+dist/
+.generated_files/
+nbproject/
+
+# MacOS
+.DS_Store/
+
+# Generic
+*.log
