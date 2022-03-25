@@ -17,9 +17,6 @@ __pycache__/
 .vscode/
 .vs/
 .settings/
-
-# MPLAB X
-build/
 debug/
 dist/
 .generated_files/

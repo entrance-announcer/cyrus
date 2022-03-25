@@ -4,17 +4,115 @@ Command-line tool to write audio files to block devices for use with miley.
 
 ## Capabilities
 
-Does not:
-
-- resample (maybe with libresample, tho)
+- resamples audio
+- scales and shifts audio samples to a desired range
+- configurable output word size
+- checks provided block device for format compatibility with miley.
 
 ## Compatibility
 
-This project targets Linux only.\
-\
-The POSIX compliant `stat` and `ioctl` functionality is used to validate the provided block device's features. These
-would permit usage on all POSIX compliant operating systems. However, in the fairly
-low-level <a href="https://en.wikipedia. org/wiki/Ioctl#:~:text=In%20computing%2C%20ioctl%20(an%20abbreviation, completely%20on%20the%20request%20code.">
-ioctl</a> command, the `BLKGETSIZE64` value from `<linux/fs.h>` is used to read the root block device's size. Since this
-program operates directly on the block device, a higher-level system call cannot be used. The usage of linux's
-implementation of this device-specific call is what restricts compatibility to linux, only.
+This project effectively targets Linux. Although all system-calls employed are POSIX
+compliant, system files are directly read for information regarding the mounting
+and partition schemes of connected block devices. Specifically, "/etc/mtab" and
+"/proc/partitions". The latter of these is only implemented on systems that
+implement [procfs](https://en.wikipedia.org/wiki/Procfs), which includes most
+Unix systems but excludes MacOS (BSD based).
+
+## Acquiring Cyrus
+
+Cyrus can be built from source by following the [development
+steps](#getting-started-with-development). Binary distributions are to
+come...maybe...this is just one component of one school project for one
+class...probably not.
+
+## Getting Started with Development
+
+### System Dependencies
+
+- **C++ Compiler** (tested with gcc 11.2.0)
+
+  A C++20 compiler is required to build this project. Examples include
+  [Clang](https://clang.llvm.org/) and [GCC](https://gcc.gnu.org/). These are
+  often already included on most systems.
+
+- **Build System** (tested with [Make](https://www.gnu.org/software/make/) 4.3 and [Ninja](https://ninja-build.org/) 1.10.2)
+
+  Again, these are often already included on most systems. Nevertheless, a build-system supported by CMake will be required. A list of supported CMake generators (for buildsystems) can be found [here](https://cmake.org/cmake/help/latest/manual/cmake-generators.7.html).
+
+- **[CMake](https://cmake.org/)** (tested with version 3.21.1)
+
+  CMake is used as the (meta) build-system for the project. This should in It can be installed
+  from your system package manager, from [CMake's releases
+  page](https://cmake.org/download/), or even through a conan tool requirement,
+  in your conan (next step) profile.
+
+  ```bash
+  pacman -S cmake # Arch Linux
+  ```
+
+- **[conan](https://conan.io/)** (optional) (tested with version 1.43.2)
+
+  Library dependencies are managed with the [conan](https://conan.io/) package manager. Conan can be used to acquire all direct and transitive dependencies for cyrus. First, install conan as a system package:
+
+  ```bash
+  pip install conan==1.43.2 # pip
+  yay -S conan # Arch Linux
+  ```
+
+### Cloning
+
+Clone this repository using any git client. The following commands will clone the repository in your current directory.
+
+```bash
+git clone git@github.com:entrance-announcer/cyrus.git  # ssh
+git clone https://github.com/entrance-announcer/cyrus.git # http
+```
+
+Then, navigate to the cloned project's root directory: `cd cyrus`. All further
+commands will be provided from here.
+
+### Library Dependencies
+
+Acquiring cyrus's dependencies is vastly simplified and easily reproducible using conan.
+However, the CMake files are written such that the libraries can be provided
+through any package that offers a CMake package config-file - this will not be
+covered. Using your desired build directory (for example, *build*) in place of `<build>`, install the library dependencies:
+
+```bash
+conan install . -if=<build> --build=missing
+```
+
+A non-default conan profile may be specified using the `-pr` argument. This can
+be used to add tool requirements, specify different compilers or compilation
+flags, or to [use
+Ninja](https://docs.conan.io/en/latest/integrations/build_system/ninja.html)
+(recommended). Further information regarding conan profiles may be found at
+[conan's official Profile
+documentation](https://docs.conan.io/en/latest/reference/profiles.html).
+
+### Building
+
+Before building, CMake must be run to generate the specified build-system files. Various examples are included below:
+
+```bash
+# default 
+cmake -B <build> -S .
+
+# default build-system, release build (single-config generators)
+cmake -B <build> -S . -D CMAKE_BUILD_TYPE=Release 
+
+# Ninja build-system
+cmake -B <build> -S . -G Ninja
+```
+
+Now, the build can be performed. The resulting binary will be statically linked and located in `<build>/bin/`.
+
+```bash
+cmake --build <build> 
+```
+
+### Installation
+
+This section discusses properly installing build artifacts and/or development
+dependencies to your system. However, CMake rules for installation aren't yet
+included in the project, as installation hasn't been required for this tool.
