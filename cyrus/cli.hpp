@@ -9,18 +9,20 @@
 
 namespace cyrus {
 
-constexpr const int default_bit_depth{12};
 constexpr const int default_word_size{2};
-constexpr const int default_sample_rate{44000};
+constexpr const int default_sample_rate{40000};
+constexpr const uint64_t default_range_max{3890};
+constexpr const uint64_t default_range_min{205};
 
 struct Parsed_arguments {
   std::filesystem::path block_device{};
   std::vector<std::filesystem::path> audio_files{};
   bool help{false};
-  int bit_depth{default_bit_depth};
   int word_size{default_word_size};
+  uint64_t range_max{default_range_max};
+  uint64_t range_min{default_range_min};
   int sample_rate{default_sample_rate};
-  bool maximize{false};
+  bool enlarge{false};
 };
 
 std::string help_message();

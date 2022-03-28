@@ -3,6 +3,7 @@ add_library(cyrus_objects OBJECT
   cli.hpp cli.cpp
   device_probing.hpp device_probing.cpp
   sample_conversions.hpp
+  signal_conversions.hpp
   write_audio.hpp write_audio.cpp
   cyrus_main.hpp cyrus_main.cpp
   audio_signal.hpp

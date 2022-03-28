@@ -5,6 +5,7 @@
 #include <bit>
 #include <concepts>
 #include <limits>
+#include <numeric>
 #include <source_location>
 #include <stdexcept>
 
@@ -34,14 +35,19 @@ class Sample_remapper {
   struct Remap_values {
     SampleFrom from_min{norm_float_min};
     SampleFrom from_max{norm_float_max};
-    SampleTo to_min{0};
+    SampleTo to_min{std::numeric_limits<SampleTo>::min()};
     SampleTo to_max{std::numeric_limits<SampleTo>::max()};
   };
 
   explicit Sample_remapper(
       const Remap_values &vals,
       const std::source_location loc = std::source_location::current()) {
-    const auto from_range = static_cast<Ratio_t>(vals.from_max - vals.from_min);
+    const auto to_min = static_cast<Ratio_t>(vals.to_min);
+    const auto to_max = static_cast<Ratio_t>(vals.to_max);
+    const auto from_min = static_cast<Ratio_t>(vals.from_min);
+    const auto from_max = static_cast<Ratio_t>(vals.from_max);
+
+    const auto from_range = vals.from_max - vals.from_min;
     if (from_range == 0) {
       throw std::domain_error(fmt::format(
           "Cannot create a sample remapper for samples "
@@ -49,14 +55,14 @@ class Sample_remapper {
           "Location: {} - ({}:{})\n",
           vals.from_min, vals.from_max, loc.file_name(), loc.line(), loc.column()));
     }
-    this->scale = static_cast<Ratio_t>(vals.to_max - vals.to_min) / from_range;
+
+    this->scale = (to_max - to_min) / from_range;
     this->shift =
-        (static_cast<Ratio_t>(vals.to_min) - static_cast<Ratio_t>(vals.from_min)) *
-        this->scale;
+        std::abs(std::midpoint(to_min, to_max) - std::midpoint(from_min, from_max));
   }
 
   inline SampleTo operator()(const SampleFrom from) const noexcept {
-    return static_cast<SampleTo>(this->scale * from + this->shift);
+    return static_cast<SampleTo>(this->scale * from);
   }
 };
 

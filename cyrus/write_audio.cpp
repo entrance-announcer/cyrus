@@ -6,7 +6,7 @@
 #include <cyrus/audio_signal.hpp>
 #include <cyrus/cli.hpp>
 #include <cyrus/device_probing.hpp>
-#include <cyrus/sample_conversions.hpp>
+#include <cyrus/signal_conversions.hpp>
 #include <cyrus/try.hpp>
 #include <cyrus/write_audio.hpp>
 #include <filesystem>
@@ -25,7 +25,8 @@ namespace cyrus {
 
 namespace {
 
-using Audio_signal_t = Audio_signal<float>;
+using InSample = float;
+using Audio_signal_t = Audio_signal<InSample>;
 using Audio_file_paths = std::remove_cvref_t<decltype(Parsed_arguments::audio_files)>;
 
 [[nodiscard]] tl::expected<std::vector<std::pair<fs::path, Audio_signal_t>>, std::string>
@@ -110,41 +111,6 @@ load_audio_files(const Audio_file_paths& audio_file_paths) {
 }
 
 
-template <Sample T>
-[[nodiscard]] tl::expected<std::vector<std::vector<std::byte>>, std::string>
-convert_audio(const Parsed_arguments& args,
-              const std::vector<std::pair<fs::path, Audio_signal_t>>& loaded_audios) {
-  std::vector<std::vector<std::byte>> converted;
-  converted.reserve(loaded_audios.size());
-  using Remap_t = typename Sample_remapper<T, Audio_signal_t::value_type>::Remap_values;
-  Remap_t remap_values{.to_max = static_cast<T>((1 << args.bit_depth) - 1)};
-
-  Audio_signal_t resampled;
-  Audio_signal<T> remapped;
-  for (const auto& [in_audio_path, loaded_audio] : loaded_audios) {
-    if (args.maximize) {
-      const auto [audio_min, audio_max] = rgs::minmax(loaded_audio);
-      remap_values.from_min = audio_min;
-      remap_values.from_max = audio_max;
-    }
-
-    resampled =
-        TRY(loaded_audio.resampled(args.sample_rate).map_error([&](const auto& err) {
-          return fmt::format("Failed to resample {}: {}.", in_audio_path,
-                             audio_error_message(err));
-        }));
-    fmt::print("\t✔ resampled {}", in_audio_path);
-
-    remapped = resampled.remapped<T>(remap_values);
-    fmt::print("\r\t✔ resampled  ✔ remapped {}\n", in_audio_path);
-
-    auto* start = std::bit_cast<std::byte*>(remapped.data());
-    converted.emplace_back(start, start + remapped.size() * sizeof(T));
-  }
-
-  return converted;
-}
-
 }  // namespace
 
 tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& args) {
@@ -172,20 +138,24 @@ tl::expected<void, std::string> write_audio_to_device(const Parsed_arguments& ar
   std::vector<std::vector<std::byte>> converted_audios;
   switch (args.word_size) {
     case 1:
-      converted_audios = TRY(convert_audio<std::uint8_t>(args, loaded_audios));
+      converted_audios =
+          TRY((convert_audio<InSample, std::uint8_t>(args, loaded_audios)));
       break;
     case 2:
-      converted_audios = TRY(convert_audio<std::uint16_t>(args, loaded_audios));
+      converted_audios =
+          TRY((convert_audio<InSample, std::uint16_t>(args, loaded_audios)));
       break;
     case 4:
-      converted_audios = TRY(convert_audio<std::uint32_t>(args, loaded_audios));
+      converted_audios =
+          TRY((convert_audio<InSample, std::uint32_t>(args, loaded_audios)));
       break;
     case 8:
-      converted_audios = TRY(convert_audio<std::uint64_t>(args, loaded_audios));
+      converted_audios =
+          TRY((convert_audio<InSample, std::uint64_t>(args, loaded_audios)));
       break;
     default:
       return tl::make_unexpected(fmt::format(
-          "Cannot convert audio samples to a word size of {}", args.word_size));
+          "Cannot convert audio samples to a word size of {} bytes", args.word_size));
   }
 
   // ensure that specified device has sufficient available space
