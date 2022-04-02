@@ -62,7 +62,7 @@ class Sample_remapper {
   }
 
   inline SampleTo operator()(const SampleFrom from) const noexcept {
-    return static_cast<SampleTo>(this->scale * from);
+    return static_cast<SampleTo>(this->scale * from + this->shift);
   }
 };
 
