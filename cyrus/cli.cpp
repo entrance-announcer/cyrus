@@ -38,11 +38,11 @@ constexpr const char* const help_message_fmt =
     "audio_files\tInput wav and aiff formatted audio files\n"
     "\n"
     "Optional Arguments:\n"
-    "{help} {help_long}      \t\t\tShow this help message and exit\n"
+    "{help} {help_long}     \t\tShow this help message and exit\n"
     "{word} {word_long} <int> \tNumber of bytes per written word [Default {word_default}]\n"
     "{range} {range_long} <min,max> Range to generate output samples [Default {range_min_default},{range_max_default}]\n"
     "{rate} {rate_long} <int>\tSamples/second of written audio [Default {rate_default}]\n"
-    "{enlarge} {enlarge_long} \t\t\tEnlarge the input waveform to occupy the entire output range\n";
+    "{enlarge} {enlarge_long} \t\tEnlarge the input waveform to occupy the entire output range\n";
 // clang-format on
 
 
