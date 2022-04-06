@@ -19,7 +19,11 @@ target_link_libraries(cyrus_objects
   SndFile::sndfile
   SampleRate::samplerate)
 
+
 # main cyrus executable
 add_executable(cyrus main.cpp)
 target_compile_options(cyrus PRIVATE "${CYRUS_DEFAULT_COMPILE_OPTIONS}")
 target_link_libraries(cyrus PRIVATE cyrus_objects)
+if (STATIC_EXEC)
+  target_link_libraries(cyrus PRIVATE -static)
+endif ()

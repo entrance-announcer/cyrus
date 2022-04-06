@@ -16,6 +16,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 option(BUILD_TESTING "Build all project tests" OFF)
+option(STATIC_EXEC "Build a statically linked executable" OFF)
 
 enable_testing()
 set(CYRUS_DEFAULT_COMPILE_OPTIONS
