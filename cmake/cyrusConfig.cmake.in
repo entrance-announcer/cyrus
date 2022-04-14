@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/cyrusTargets.cmake")
+include(CMakeFindDependencyMacro)
+find_dependency(tl-expected REQUIRED CONFIG)
+
+check_required_components(cyrus)

@@ -9,7 +9,7 @@ add_library(cyrus_objects OBJECT
   audio_signal.hpp
   try.hpp
   )
-target_include_directories(cyrus_objects PUBLIC "${PROJECT_SOURCE_DIR}")
+target_include_directories(cyrus_objects PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>")
 target_compile_options(cyrus_objects PRIVATE "${CYRUS_DEFAULT_COMPILE_OPTIONS}")
 target_link_libraries(cyrus_objects
   PUBLIC
