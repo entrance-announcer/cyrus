@@ -22,9 +22,8 @@ based).
 
 In the GitHub releases, a pre-built static executable is offered, which can be downloaded and invoked on a modern
 version of linux. Additionally, Cyrus can be built from source by following the
-[development steps]
-(#getting-started-with-development). Binary packages are to come...maybe...this is just one component of one school
-project for one class...probably not.
+[development steps](#getting-started-with-development). Binary packages are to come...maybe...this is just one component
+of one school project for one class...probably not.
 
 ## Getting Started with Development
 
